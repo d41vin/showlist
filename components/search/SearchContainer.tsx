@@ -82,7 +82,9 @@ export function SearchContainer() {
 
   return (
     <div className="container mx-auto p-4">
-      <SearchInput onSearch={handleSearch} isLoading={isPending} />
+      <div className="flex flex-col items-center">
+        <SearchInput onSearch={handleSearch} isLoading={isPending} />
+      </div>
       <SearchResults
         results={results}
         isLoading={isPending}
