@@ -1,24 +1,22 @@
 // components/ShowCard.tsx
-'use client'
 
-import { useState } from "react"
-import Image from "next/image"
-import { Button } from "@/components/ui/button"
+import Image from "next/image";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuItem
-} from "@/components/ui/dropdown-menu"
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 interface ShowCardProps {
-  title: string
-  year: number
-  type: "Movie" | "TV"
-  posterUrl?: string
-  onWatchlist?: () => void
-  onWatched?: () => void
-  onAddToList?: (listName: string) => void
+  title: string;
+  year: number;
+  type: "Movie" | "TV";
+  posterUrl?: string;
+  onWatchlist?: () => void;
+  onWatched?: () => void;
+  onAddToList?: (listName: string) => void;
 }
 
 export default function ShowCard({
@@ -28,13 +26,13 @@ export default function ShowCard({
   posterUrl,
   onWatchlist,
   onWatched,
-  onAddToList
+  onAddToList,
 }: ShowCardProps) {
-  const lists = ["Holiday Picks", "Rewatch List", "+ New List"]
+  const lists = ["Holiday Picks", "Rewatch List", "+ New List"];
 
   return (
-    <div className="w-[250px] rounded-xl overflow-hidden bg-zinc-900 shadow-lg text-white">
-      <div className="relative h-[360px] flex items-end justify-center bg-gradient-to-br from-pink-500 to-yellow-400">
+    <div className="w-[250px] overflow-hidden rounded-xl bg-zinc-900 text-white shadow-lg">
+      <div className="relative flex h-[360px] items-end justify-center bg-gradient-to-br from-pink-500 to-yellow-400">
         {posterUrl && (
           <Image
             src={posterUrl}
@@ -44,12 +42,13 @@ export default function ShowCard({
             className="absolute top-0 left-0"
           />
         )}
-        <div className="relative w-full text-center bg-black/50 py-2 text-sm font-semibold z-10">
-          {title} ({year})<br />{type}
+        <div className="relative z-10 w-full bg-black/50 py-2 text-center text-sm font-semibold">
+          {title} ({year})<br />
+          {type}
         </div>
       </div>
 
-      <div className="p-4 flex flex-col gap-3">
+      <div className="flex flex-col gap-3 p-4">
         <div className="flex gap-2">
           <Button className="flex-1" variant="secondary" onClick={onWatched}>
             ✅ Watched
@@ -67,10 +66,7 @@ export default function ShowCard({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             {lists.map((list, idx) => (
-              <DropdownMenuItem
-                key={idx}
-                onClick={() => onAddToList?.(list)}
-              >
+              <DropdownMenuItem key={idx} onClick={() => onAddToList?.(list)}>
                 {list}
               </DropdownMenuItem>
             ))}
@@ -78,5 +74,5 @@ export default function ShowCard({
         </DropdownMenu>
       </div>
     </div>
-  )
+  );
 }
