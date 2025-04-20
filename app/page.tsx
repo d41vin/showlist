@@ -36,7 +36,15 @@ export default function HomePage() {
       </div>
 
       {/* Other content can go here later */}
-      <ShowCard />
+      <ShowCard
+        title="Example Movie"
+        year={2023}
+        type="Movie"
+        posterUrl="/placeholder.jpg"
+        onWatchlist={() => console.log("Added to watchlist")}
+        onWatched={() => console.log("Marked as watched")}
+        onAddToList={(listName) => console.log(`Added to ${listName}`)}
+      />
     </main>
   );
 }
