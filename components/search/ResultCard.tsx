@@ -93,7 +93,7 @@ export function ResultCard({ item }: ResultCardProps) {
           <Button
             variant="outline"
             size="sm"
-            className="w-full min-w-max justify-center rounded-none p-1"
+            className="w-full min-w-max justify-center rounded-none p-1 h-8"
             onClick={handleWatchedClick}
           >
             <CheckCircle className="mr-0 h-4 w-4" />
@@ -102,7 +102,7 @@ export function ResultCard({ item }: ResultCardProps) {
           <Button
             variant="outline"
             size="sm"
-            className="w-full min-w-max justify-center rounded-none p-1"
+            className="w-full min-w-max justify-center rounded-none p-1 h-8"
             onClick={handleWatchlistClick}
           >
             <Bookmark className="mr-0 h-4 w-4" />
@@ -113,7 +113,7 @@ export function ResultCard({ item }: ResultCardProps) {
           <Button
             variant="outline"
             size="sm"
-            className="col-span-2 w-full justify-center rounded-none"
+            className="col-span-2 w-full justify-center rounded-none h-8"
             onClick={handleAddToListClick}
           >
             <ListPlus className="mr-0 h-4 w-4" />
@@ -123,8 +123,8 @@ export function ResultCard({ item }: ResultCardProps) {
           {/* Row 3 - Ratings */}
           <Button
             variant="outline"
-            size="icon"
-            className="w-full rounded-none"
+            size="sm"
+            className="w-full rounded-none h-8"
             onClick={handleThumbsUpClick}
             aria-label="Rate up"
           >
@@ -132,8 +132,8 @@ export function ResultCard({ item }: ResultCardProps) {
           </Button>
           <Button
             variant="outline"
-            size="icon"
-            className="w-full rounded-none"
+            size="sm"
+            className="w-full rounded-none h-8"
             onClick={handleThumbsDownClick}
             aria-label="Rate down"
           >
