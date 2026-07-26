@@ -6,9 +6,11 @@ import {
   UserButton,
 } from "@clerk/nextjs"
 import { shadcn } from "@clerk/ui/themes"
-import { Geist, Geist_Mono, Inter } from "next/font/google"
+import { Geist_Mono, Inter } from "next/font/google"
+import Link from "next/link"
 
 import "@/styles/globals.css"
+import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -38,24 +40,31 @@ export default function RootLayout({
     >
       <body>
         <ClerkProvider appearance={{ theme: shadcn }}>
-          <ThemeProvider>
-            <header className="flex h-14 items-center justify-end gap-2 border-b px-6">
-              <Show when="signed-out">
-                <SignInButton>
-                  <Button variant="ghost" size="sm">
-                    Sign in
-                  </Button>
-                </SignInButton>
-                <SignUpButton>
-                  <Button size="sm">Sign up</Button>
-                </SignUpButton>
-              </Show>
-              <Show when="signed-in">
-                <UserButton />
-              </Show>
-            </header>
-            {children}
-          </ThemeProvider>
+          <ConvexClientProvider>
+            <ThemeProvider>
+              <header className="flex h-14 items-center justify-between gap-2 border-b px-6">
+                <Link href="/" className="font-semibold tracking-tight">
+                  ShowList
+                </Link>
+                <div className="flex items-center gap-2">
+                  <Show when="signed-out">
+                    <SignInButton>
+                      <Button variant="ghost" size="sm">
+                        Sign in
+                      </Button>
+                    </SignInButton>
+                    <SignUpButton>
+                      <Button size="sm">Sign up</Button>
+                    </SignUpButton>
+                  </Show>
+                  <Show when="signed-in">
+                    <UserButton />
+                  </Show>
+                </div>
+              </header>
+              {children}
+            </ThemeProvider>
+          </ConvexClientProvider>
         </ClerkProvider>
       </body>
     </html>

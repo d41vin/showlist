@@ -1,19 +1,34 @@
+import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
+
+import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
-        </div>
-        <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
-        </div>
-      </div>
-    </div>
+    <>
+      <Show when="signed-out">
+        <main className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-6">
+          <div className="flex max-w-md flex-col items-center gap-4 text-center">
+            <h1 className="text-4xl font-semibold tracking-tight">ShowList</h1>
+            <p className="text-muted-foreground">
+              A minimal tracker for movies and TV shows. Keep a watchlist, mark
+              what you&apos;ve watched, and organize everything into your own
+              collections.
+            </p>
+            <div className="flex items-center gap-2">
+              <SignUpButton>
+                <Button>Get started</Button>
+              </SignUpButton>
+              <SignInButton>
+                <Button variant="outline">Sign in</Button>
+              </SignInButton>
+            </div>
+          </div>
+        </main>
+      </Show>
+      <Show when="signed-in">
+        <AppShell />
+      </Show>
+    </>
   )
 }
