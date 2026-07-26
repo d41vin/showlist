@@ -7,15 +7,48 @@
 
 ## Status
 
-**Session 3 — Collections + polish: COMPLETE, user-verified.** All Session 3
-scope is implemented and confirmed working by the user in the browser
-("everything works great"). Backend checklist verified against the dev
-deployment; `pnpm typecheck` + `pnpm lint` + `pnpm build` all pass. The
-project scope from `build-plan.md` is complete; a user-requested redesign of
-the Collections tab (collection cards grid instead of the dropdown) is now in
-progress as a follow-up.
+**Session 3 — Collections + polish: COMPLETE, user-verified, committed.**
+**Session 4 — Collections tab redesign: COMPLETE, user-verified, committed.**
+The user-requested redesign (collection cards grid replacing the tab
+dropdown) is implemented and confirmed working by the user in the browser
+("it works and looks great"). Backend verified against the dev deployment;
+`pnpm typecheck` + `pnpm lint` + `pnpm build` all pass. The project is
+complete.
 
-## Last session summary
+## Session 4 summary — Collections tab redesign (2026-07-27)
+
+User-requested redesign, all choices confirmed with the user up front
+(cover-crop mosaic, muted folder icon for empty collections, back row with
+name + count):
+
+- **Backend** (`convex/collections.ts`): `listMine` now also returns
+  `itemCount` and `previewPosters` (poster paths of the up-to-4 most
+  recently added items, most recent first; `null` = item has no poster).
+  Verified via `npx convex run --identity`: counts and poster order correct;
+  QA data cleaned up afterwards.
+- **Collections tab** (`components/app-shell.tsx`): the dropdown composition
+  is gone — the tab is a plain trigger showing a grid of landscape
+  (`aspect-video`) collection cards (1 col mobile / 2 sm / 3 lg). Each card
+  face is a poster mosaic (`CollectionMosaic`): 1 item fills the card, 2 side
+  by side, 3 = full-height left + stacked right, 4+ = 2×2 grid of the most
+  recent four. Tiles are cover-cropped centered windows (`object-cover`);
+  posterless items show the image-not-found icon tile; empty collections
+  show a muted folder icon face. Caption below matches item cards: name +
+  "N items".
+- **Create card**: first grid cell is always a dashed-border card-sized
+  button (plus icon + "Create") opening the existing create dialog. Creating
+  stays on the cards view (the new card appears reactively) — the old
+  auto-select-on-create behavior was removed with the dropdown.
+- **Detail view**: clicking a card swaps the pane to that collection's item
+  grid with a back row above it — ghost "← Back" button far left, then the
+  collection name and item count. Back returns to the cards view; switching
+  tabs also resets to the cards view (`selectedCollectionId` cleared in the
+  Tabs `onValueChange`).
+- `lib/media.ts`: added `CollectionPreview` (= `CollectionSummary` +
+  `itemCount` + `previewPosters`). The card popover in `show-card.tsx` is
+  unchanged (previews are a structural superset of summaries).
+
+## Session 3 summary
 
 Session 3 (2026-07-27) built:
 
@@ -113,4 +146,5 @@ Carried over from Sessions 1–2 (all still true):
 | 1 | 2026-07-26 | Complete. Backend wired, search + cards working, user-verified. |
 | 2 | 2026-07-26 | Complete. Items backend + overlay + tabs + drawer, user-verified. Added drawer backdrop + action row on user request. Committed. |
 | 3 | 2026-07-27 | Complete. Collections feature + polish, user-verified in browser. Committed. |
+| 4 | 2026-07-27 | Complete. Collections tab redesign (cards grid + mosaic + detail view), user-verified in browser. Committed. |
 
