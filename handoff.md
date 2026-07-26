@@ -7,48 +7,80 @@
 
 ## Status
 
-**Session 1 — Foundation: COMPLETE and user-verified.** Next up: Session 2 — Core
-actions (overlay + tabs + drawer). Signed-in search verified working by the user;
-Clerk's Convex integration is enabled in the Clerk dashboard.
+**Session 2 — Core actions: COMPLETE and user-verified.** Next up: Session 3 —
+Collections + polish. User confirmed toggles land in the correct tabs and the
+overall flow works. Post-verification additions (user request): TMDB backdrop
+image at the top of the details drawer, and the in-app action buttons as a
+horizontal row under the type/year line in the drawer.
 
 ## Last session summary
 
-Session 1 (2026-07-26) built:
+Session 2 (2026-07-26) built:
 
-- **Convex⇄Clerk wiring**: `convex/auth.config.ts` (reads `CLERK_JWT_ISSUER_DOMAIN`,
-  applicationID "convex"); `components/convex-client-provider.tsx`
-  (`ConvexProviderWithClerk`) nested inside `ClerkProvider` in `app/layout.tsx`.
-  Deployment env vars set on dev deployment `useful-porcupine-904`:
-  `CLERK_JWT_ISSUER_DOMAIN=https://full-hornet-45.clerk.accounts.dev`, `TMDB_API_KEY`.
-- **Schema** deployed (`convex/schema.ts`): items / collections / collectionItems
-  with all indexes.
-- **TMDB actions** (`convex/tmdb.ts`): `search` (multi-search filtered to movie/tv)
-  and `details`; both require auth; supports v3 key or v4 bearer token.
-  `searchResultValidator` is exported for reuse by Session 2 mutations.
-- **UI**: nav with wordmark + Clerk controls (`app/layout.tsx`); landing page for
-  signed-out and `AppShell` for signed-in (`app/page.tsx`); debounced (400ms) search
-  with stale-response guard (`components/app-shell.tsx`); base card
-  (`components/show-card.tsx`, kebab inert); shadcn `input` added;
-  `image.tmdb.org/t/p/**` allowed in `next.config.ts`.
-- Verified: typecheck + lint clean; convex deploy clean; landing page verified in
-  browser (no console errors). Signed-in search NOT yet user-verified.
+- **Items backend** (`convex/items.ts`): `listMine` query (all my items via
+  `by_user`); `toggleWatchlist`, `toggleWatched`, `setSentiment` mutations.
+  All auth-scoped to `identity.tokenIdentifier`, all take a TMDB snapshot
+  (`searchResultValidator` from `tmdb.ts`) for lazy create, all run the cleanup
+  rule (`deleteIfFullyUnset`: no flags + no sentiment + no collection membership
+  → delete doc). `setSentiment` toggles server-side: same value clears, other
+  value replaces (mutually exclusive).
+- **Card overlay** (`components/show-card.tsx`, now "use client"): hover overlay
+  on desktop (CSS `group-hover`), click/tap opens persistently, closes on outside
+  `pointerdown`/Escape; one open at a time via `activeCardKey` lifted to
+  `AppShell`. Buttons: Watchlist, Watched (active = filled `default` variant +
+  swapped icon), Collections (disabled until Session 3), liked/disliked icon
+  pair. All wired to the mutations with the exact snapshot shape.
+- **Tabs** (`components/app-shell.tsx`): shadcn `tabs` (Watchlist default |
+  Watched | Collections "coming next" pane). Panes filter `listMine` client-side,
+  sorted by `updatedAt` desc, with empty states. Tabs hidden while a search
+  query is active; search results reuse the same `CardGrid` + state map
+  (`mediaKey` = `mediaType:tmdbId`), so result cards show saved state.
+- **Details drawer**: kebab opens shadcn `drawer` (fetches `tmdb.details` once
+  per card, loading/error states; rating, runtime or seasons·episodes, release
+  date, genres, tagline, overview). Post-verification additions: `tmdb.details`
+  now also returns `backdropPath`; the drawer renders the backdrop (w780, with
+  a pulse placeholder while loading) above the title, and the in-app action
+  buttons render as a horizontal wrap row under the type/year line (centered on
+  the bottom sheet, left-aligned from `md`). The overlay + drawer share the
+  extracted `ItemActions` component (`layout="stack" | "row"`;
+  `tmdbBackdropUrl` added to `lib/media.ts`).
+- **Shared types** (`lib/media.ts`): added `Sentiment`, `ItemState`, `mediaKey`.
+- shadcn `tabs` + `drawer` added via `pnpm dlx shadcn@latest add` (base-ui
+  primitives, no new deps).
+
+**Verified:** `pnpm typecheck` + `pnpm lint` clean; convex deploy clean. Backend
+checklist verified against the dev deployment via `npx convex run --identity`
+(mock identity, test data cleaned up by the cleanup rule itself): lazy create ✓,
+both flags coexist ✓, sentiment exclusive + clears ✓, fully-unset doc deleted ✓,
+`details` returns `backdropPath` ✓. Landing page loads with no console errors.
+**User verified in browser:** toggles work and items appear under the correct
+tab; icon direction (filled variant + swapped icon) explicitly approved — keep.
 
 ## Deviations from plan / decisions made mid-build
 
+- Session 1 items kept as-is (see below).
+- `setSentiment` takes the sentiment being clicked and toggles server-side
+  rather than the client sending the computed next value — keeps the
+  mutual-exclusion rule in one place.
+- Active overlay buttons use the filled `default` button variant + swapped icon
+  (hugeicons free set has no filled icon variants). **User-approved — keep.**
+- `items.listMine` is skipped client-side (`"skip"`) until Convex auth is ready.
+
+Carried over from Session 1:
+
 - `collections.createdAt` dropped from schema — Convex's `_creationTime` covers it.
-- Per Convex guidelines, use `identity.tokenIdentifier` (not `subject`) as the
-  `userId` value in Session 2+ mutations/queries.
-- Clerk⇄Convex now uses the dashboard "Convex integration activation"
-  (dashboard.clerk.com/apps/setup/convex) instead of manually creating a JWT
-  template; the template must be named/result in audience "convex" either way.
+- `identity.tokenIdentifier` (not `subject`) is the `userId` value everywhere.
+- Clerk⇄Convex uses the dashboard "Convex integration activation".
 - Shared card/item type lives in `lib/media.ts` (`MediaItem`, `tmdbPosterUrl`).
-- eslint now ignores `convex/_generated/**`.
+- eslint ignores `convex/_generated/**`.
 
 ## Known issues / warnings for next session
 
-- Clerk Convex integration is ENABLED (user did this in the Clerk dashboard);
-  `CLERK_FRONTEND_API_URL` was added to `.env.local` and `.env.example`.
-- Something occupies port 3000 locally, so `pnpm dev` lands on 3001.
+- Clerk dev instance shows a Cloudflare "Verify you are human" challenge on
+  sign-up; automated browser verification of signed-in flows is not possible.
+  Backend can be tested with `npx convex run <fn> '<args>' --identity '<json>'`.
+- Something occupies port 3000 locally, so `pnpm dev` lands on 3001 (a dev
+  server may already be running — check before starting another).
 - User constraint: **no global installs, no changes outside this workspace.**
 
 ## Session log
@@ -57,5 +89,5 @@ Session 1 (2026-07-26) built:
 |---|---|---|
 | Planning | 2026-07-26 | Brief, build plan, handoff created. |
 | 1 | 2026-07-26 | Complete. Backend wired, search + cards working, user-verified. |
-| 2 | — | — |
+| 2 | 2026-07-26 | Complete. Items backend + overlay + tabs + drawer, user-verified. Added drawer backdrop + action row on user request. Committed. |
 | 3 | — | — |
