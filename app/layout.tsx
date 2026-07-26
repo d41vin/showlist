@@ -5,6 +5,7 @@ import {
   SignUpButton,
   UserButton,
 } from "@clerk/nextjs"
+import { shadcn } from "@clerk/ui/themes"
 import { Geist, Geist_Mono, Inter } from "next/font/google"
 
 import "@/styles/globals.css"
@@ -36,7 +37,7 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ClerkProvider>
+        <ClerkProvider appearance={{ theme: shadcn }}>
           <ThemeProvider>
             <header className="flex h-14 items-center justify-end gap-2 border-b px-6">
               <Show when="signed-out">
