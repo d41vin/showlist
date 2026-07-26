@@ -1,19 +1,20 @@
 "use client"
 
-import { PlusSignIcon, Search01Icon } from "@hugeicons/core-free-icons"
+import {
+  ArrowLeft01Icon,
+  Folder01Icon,
+  ImageNotFound01Icon,
+  PlusSignIcon,
+  Search01Icon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction, useConvexAuth, useQuery } from "convex/react"
+import Image from "next/image"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { CreateCollectionDialog } from "@/components/create-collection-dialog"
 import { ShowCard } from "@/components/show-card"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -21,10 +22,13 @@ import { api } from "@/convex/_generated/api"
 import { type Id } from "@/convex/_generated/dataModel"
 import {
   mediaKey,
+  tmdbPosterUrl,
+  type CollectionPreview,
   type CollectionSummary,
   type ItemState,
   type MediaItem,
 } from "@/lib/media"
+import { cn } from "@/lib/utils"
 
 const SEARCH_DEBOUNCE_MS = 400
 
@@ -43,7 +47,8 @@ export function AppShell() {
 
   const [query, setQuery] = useState("")
   const [tab, setTab] = useState("watchlist")
-  // Which collection the Collections tab is showing (persists across tabs).
+  // Which collection the Collections tab is showing (null = cards view;
+  // reset whenever the tab changes so re-entering shows the cards again).
   const [selectedCollectionId, setSelectedCollectionId] =
     useState<Id<"collections"> | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -166,40 +171,14 @@ export function AppShell() {
             onValueChange={(value) => {
               setTab(String(value))
               setActiveCardKey(null)
+              // Leaving/re-entering Collections always lands on the cards view.
+              setSelectedCollectionId(null)
             }}
           >
             <TabsList className="mx-auto">
               <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
               <TabsTrigger value="watched">Watched</TabsTrigger>
-              {/* The Collections trigger doubles as a dropdown: pick a
-                  collection (relabels the tab) or create a new one. */}
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={<TabsTrigger value="collections" />}
-                >
-                  {selectedCollection
-                    ? `Collection – ${selectedCollection.name}`
-                    : "Collections"}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="center" className="w-56">
-                  <DropdownMenuItem onClick={() => setCreateOpen(true)}>
-                    <HugeiconsIcon icon={PlusSignIcon} />
-                    Create collection
-                  </DropdownMenuItem>
-                  {collections.length > 0 && <DropdownMenuSeparator />}
-                  {collections.map((collection) => (
-                    <DropdownMenuItem
-                      key={collection._id}
-                      onClick={() => {
-                        setSelectedCollectionId(collection._id)
-                        setTab("collections")
-                      }}
-                    >
-                      <span className="truncate">{collection.name}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <TabsTrigger value="collections">Collections</TabsTrigger>
             </TabsList>
             <TabsContent value="watchlist" className="mt-6">
               <CardGrid
@@ -218,30 +197,44 @@ export function AppShell() {
               />
             </TabsContent>
             <TabsContent value="collections" className="mt-6">
-              {selectedCollectionId === null ? (
-                <p className="py-16 text-center text-sm text-muted-foreground">
-                  Pick a collection from the Collections tab, or create your
-                  first one.
-                </p>
-              ) : (
-                <CollectionGrid
-                  collectionId={selectedCollectionId}
-                  {...gridProps}
+              {selectedCollection === null ? (
+                <CollectionCards
+                  collections={collections}
+                  loading={myCollections === undefined}
+                  onOpen={setSelectedCollectionId}
+                  onCreate={() => setCreateOpen(true)}
                 />
+              ) : (
+                <>
+                  <div className="mb-4 flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="-ml-2 shrink-0"
+                      onClick={() => setSelectedCollectionId(null)}
+                    >
+                      <HugeiconsIcon icon={ArrowLeft01Icon} />
+                      Back
+                    </Button>
+                    <h2 className="min-w-0 truncate text-sm font-medium">
+                      {selectedCollection.name}
+                    </h2>
+                    <span className="shrink-0 text-sm text-muted-foreground">
+                      {formatItemCount(selectedCollection.itemCount)}
+                    </span>
+                  </div>
+                  <CollectionGrid
+                    collectionId={selectedCollection._id}
+                    {...gridProps}
+                  />
+                </>
               )}
             </TabsContent>
           </Tabs>
         )}
       </div>
 
-      <CreateCollectionDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={(collectionId) => {
-          setSelectedCollectionId(collectionId)
-          setTab("collections")
-        }}
-      />
+      <CreateCollectionDialog open={createOpen} onOpenChange={setCreateOpen} />
     </main>
   )
 }
@@ -336,6 +329,152 @@ function CollectionGrid({
       emptyMessage="This collection is empty — use a card's Collections button to add titles."
       {...gridProps}
     />
+  )
+}
+
+// Landscape collection cards, wider than the 2:3 poster cards on purpose.
+const COLLECTION_GRID_CLASS =
+  "grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"
+
+function formatItemCount(count: number) {
+  return `${count} ${count === 1 ? "item" : "items"}`
+}
+
+function CollectionCards({
+  collections,
+  loading,
+  onOpen,
+  onCreate,
+}: {
+  collections: CollectionPreview[]
+  loading: boolean
+  onOpen: (id: Id<"collections">) => void
+  onCreate: () => void
+}) {
+  if (loading) {
+    return (
+      <div className={COLLECTION_GRID_CLASS}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="flex flex-col gap-1.5">
+            <Skeleton className="aspect-video w-full rounded-lg" />
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-3 w-1/4" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div className={COLLECTION_GRID_CLASS}>
+      {/* The first cell is always the create card. */}
+      <button
+        type="button"
+        onClick={onCreate}
+        className="group flex flex-col gap-1.5 text-left"
+      >
+        <div className="flex aspect-video w-full items-center justify-center gap-2 rounded-lg border border-dashed text-muted-foreground transition-colors group-hover:bg-muted/50 group-hover:text-foreground">
+          <HugeiconsIcon icon={PlusSignIcon} className="size-5" />
+          <span className="text-sm font-medium">Create</span>
+        </div>
+      </button>
+      {collections.map((collection) => (
+        <CollectionCard
+          key={collection._id}
+          collection={collection}
+          onOpen={() => onOpen(collection._id)}
+        />
+      ))}
+    </div>
+  )
+}
+
+function CollectionCard({
+  collection,
+  onOpen,
+}: {
+  collection: CollectionPreview
+  onOpen: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex min-w-0 cursor-pointer flex-col gap-1.5 text-left"
+    >
+      <div className="aspect-video w-full overflow-hidden rounded-lg bg-muted transition-[filter] group-hover:brightness-90">
+        <CollectionMosaic posters={collection.previewPosters} />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{collection.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {formatItemCount(collection.itemCount)}
+        </p>
+      </div>
+    </button>
+  )
+}
+
+// Poster mosaic for a collection card: each tile is a centered window onto
+// the poster (cover crop). Layout depends on how many posters there are:
+// 1 fills the card, 2 sit side by side, 3 = full-height left + stacked
+// right, 4 is a 2x2 grid. Empty collections show a folder face instead.
+function CollectionMosaic({ posters }: { posters: (string | null)[] }) {
+  const tiles = posters.slice(0, 4)
+  if (tiles.length === 0) {
+    return (
+      <div className="flex size-full items-center justify-center text-muted-foreground">
+        <HugeiconsIcon icon={Folder01Icon} className="size-8" />
+      </div>
+    )
+  }
+  if (tiles.length === 1) {
+    return <MosaicTile posterPath={tiles[0]} className="size-full" />
+  }
+  if (tiles.length === 2) {
+    return (
+      <div className="grid size-full grid-cols-2 gap-0.5">
+        {tiles.map((posterPath, i) => (
+          <MosaicTile key={i} posterPath={posterPath} />
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div className="grid size-full grid-cols-2 grid-rows-2 gap-0.5">
+      {tiles.map((posterPath, i) => (
+        <MosaicTile
+          key={i}
+          posterPath={posterPath}
+          className={tiles.length === 3 && i === 0 ? "row-span-2" : undefined}
+        />
+      ))}
+    </div>
+  )
+}
+
+function MosaicTile({
+  posterPath,
+  className,
+}: {
+  posterPath: string | null
+  className?: string
+}) {
+  return (
+    <div className={cn("relative overflow-hidden bg-muted", className)}>
+      {posterPath ? (
+        <Image
+          src={tmdbPosterUrl(posterPath)}
+          alt=""
+          fill
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          className="object-cover"
+        />
+      ) : (
+        <div className="flex h-full items-center justify-center text-muted-foreground">
+          <HugeiconsIcon icon={ImageNotFound01Icon} className="size-6" />
+        </div>
+      )}
+    </div>
   )
 }
 

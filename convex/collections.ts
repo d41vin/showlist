@@ -23,6 +23,8 @@ async function requireCollection(
   return collection
 }
 
+// Collections plus what their cards need: item count and the poster paths
+// of the up-to-4 most recently added items (null = item has no poster).
 export const listMine = query({
   args: {},
   returns: v.array(
@@ -31,14 +33,33 @@ export const listMine = query({
       _creationTime: v.number(),
       userId: v.string(),
       name: v.string(),
+      itemCount: v.number(),
+      previewPosters: v.array(v.union(v.string(), v.null())),
     })
   ),
   handler: async (ctx) => {
     const userId = await requireUserId(ctx)
-    return await ctx.db
+    const collections = await ctx.db
       .query("collections")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect()
+    const result = []
+    for (const collection of collections) {
+      const rows = await ctx.db
+        .query("collectionItems")
+        .withIndex("by_collection", (q) => q.eq("collectionId", collection._id))
+        .order("desc")
+        .collect()
+      const previewPosters: (string | null)[] = []
+      for (const row of rows.slice(0, 4)) {
+        const item = await ctx.db.get("items", row.itemId)
+        if (item !== null) {
+          previewPosters.push(item.posterPath)
+        }
+      }
+      result.push({ ...collection, itemCount: rows.length, previewPosters })
+    }
+    return result
   },
 })
 

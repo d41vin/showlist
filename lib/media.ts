@@ -27,6 +27,13 @@ export type CollectionSummary = {
   name: string
 }
 
+// What a collection card renders: summary plus count and the poster paths of
+// the up-to-4 most recently added items (from collections.listMine).
+export type CollectionPreview = CollectionSummary & {
+  itemCount: number
+  previewPosters: (string | null)[]
+}
+
 // The user's saved state for one title (from items.listMine, joined with
 // collection memberships client-side).
 export type ItemState = {
