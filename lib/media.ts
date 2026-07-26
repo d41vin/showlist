@@ -1,3 +1,5 @@
+import type { Id } from "@/convex/_generated/dataModel"
+
 export type MediaType = "movie" | "tv"
 
 // Minimal TMDB snapshot used by cards, search results and item mutations.
@@ -19,11 +21,20 @@ export function tmdbBackdropUrl(backdropPath: string) {
 
 export type Sentiment = "liked" | "disliked"
 
-// The user's saved state for one title (from items.listMine).
+// A user collection as list/menu entries need it (from collections.listMine).
+export type CollectionSummary = {
+  _id: Id<"collections">
+  name: string
+}
+
+// The user's saved state for one title (from items.listMine, joined with
+// collection memberships client-side).
 export type ItemState = {
+  itemId: Id<"items">
   inWatchlist: boolean
   watched: boolean
   sentiment?: Sentiment
+  collectionIds: ReadonlySet<Id<"collections">>
 }
 
 // Stable client-side key for one TMDB title (ids can collide across types).

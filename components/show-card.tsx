@@ -6,8 +6,10 @@ import {
   CheckmarkCircle02Icon,
   EyeIcon,
   FolderAddIcon,
+  FolderCheckIcon,
   ImageNotFound01Icon,
   MoreHorizontalIcon,
+  PlusSignIcon,
   StarIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
@@ -18,7 +20,9 @@ import type { FunctionReturnType } from "convex/server"
 import Image from "next/image"
 import { useEffect, useRef, useState } from "react"
 
+import { CreateCollectionDialog } from "@/components/create-collection-dialog"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Drawer,
   DrawerContent,
@@ -26,10 +30,17 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { api } from "@/convex/_generated/api"
+import { type Id } from "@/convex/_generated/dataModel"
 import {
   tmdbBackdropUrl,
   tmdbPosterUrl,
+  type CollectionSummary,
   type ItemState,
   type MediaItem,
   type Sentiment,
@@ -38,31 +49,49 @@ import { cn } from "@/lib/utils"
 
 type ShowDetails = FunctionReturnType<typeof api.tmdb.details>
 
+// Portaled layers (popover/dialog) opened from the overlay render outside
+// the card's DOM subtree — interactions inside them must not close it.
+const LAYER_SELECTOR =
+  '[data-slot="popover-content"], [data-slot="dialog-content"], [data-slot="dialog-overlay"]'
+
+function isInLayer(target: EventTarget | null) {
+  return target instanceof Element && target.closest(LAYER_SELECTOR) !== null
+}
+
 export function ShowCard({
   item,
   state,
+  collections,
   overlayOpen,
   onOverlayOpenChange,
 }: {
   item: MediaItem
   state: ItemState | undefined
+  collections: CollectionSummary[]
   overlayOpen: boolean
   onOverlayOpenChange: (open: boolean) => void
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
 
-  // A persistently opened overlay closes on outside tap/click or Escape.
+  // A persistently opened overlay closes on outside tap/click or Escape,
+  // except while a popover/dialog opened from it is in play.
   useEffect(() => {
     if (!overlayOpen) {
       return
     }
     const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) {
+      if (
+        !rootRef.current?.contains(e.target as Node) &&
+        !isInLayer(e.target)
+      ) {
         onOverlayOpenChange(false)
       }
     }
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (
+        e.key === "Escape" &&
+        document.querySelector(LAYER_SELECTOR) === null
+      ) {
         onOverlayOpenChange(false)
       }
     }
@@ -102,7 +131,7 @@ export function ShowCard({
               : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
           )}
         >
-          <ItemActions item={item} state={state} />
+          <ItemActions item={item} state={state} collections={collections} />
         </div>
       </div>
       <div className="min-w-0">
@@ -113,7 +142,7 @@ export function ShowCard({
             |
           </span>
           <span>{item.year ?? "—"}</span>
-          <DetailsDrawer item={item} state={state} />
+          <DetailsDrawer item={item} state={state} collections={collections} />
         </div>
       </div>
     </div>
@@ -125,10 +154,12 @@ export function ShowCard({
 function ItemActions({
   item,
   state,
+  collections,
   layout = "stack",
 }: {
   item: MediaItem
   state: ItemState | undefined
+  collections: CollectionSummary[]
   layout?: "stack" | "row"
 }) {
   const toggleWatchlist = useMutation(api.items.toggleWatchlist)
@@ -174,19 +205,13 @@ function ItemActions({
         <HugeiconsIcon icon={watched ? CheckmarkCircle02Icon : EyeIcon} />
         Watched
       </Button>
-      {/* Enabled in Session 3 (collections popover). */}
-      <Button
-        variant="secondary"
-        size="sm"
-        className={stacked ? "w-full" : undefined}
-        disabled
-      >
-        <HugeiconsIcon icon={FolderAddIcon} />
-        Collections
-      </Button>
-      <div
-        className={cn("flex gap-1.5", stacked && "mt-1 justify-center")}
-      >
+      <CollectionsPopover
+        snapshot={snapshot}
+        state={state}
+        collections={collections}
+        stacked={stacked}
+      />
+      <div className={cn("flex gap-1.5", stacked && "mt-1 justify-center")}>
         <SentimentButton
           value="liked"
           icon={ThumbsUpIcon}
@@ -230,12 +255,101 @@ function SentimentButton({
   )
 }
 
+// Checkbox list of the user's collections for one title, plus a "New
+// collection" entry that opens the shared create dialog (and adds the
+// title to the collection it just created).
+function CollectionsPopover({
+  snapshot,
+  state,
+  collections,
+  stacked,
+}: {
+  snapshot: MediaItem
+  state: ItemState | undefined
+  collections: CollectionSummary[]
+  stacked: boolean
+}) {
+  const addItem = useMutation(api.collections.addItem)
+  const removeItem = useMutation(api.collections.removeItem)
+  const [createOpen, setCreateOpen] = useState(false)
+
+  const collectionIds = state?.collectionIds
+  const inAnyCollection = (collectionIds?.size ?? 0) > 0
+
+  const toggle = (collectionId: Id<"collections">, checked: boolean) => {
+    if (checked) {
+      void addItem({ collectionId, item: snapshot })
+    } else if (state !== undefined) {
+      void removeItem({ collectionId, itemId: state.itemId })
+    }
+  }
+
+  return (
+    <>
+      <Popover>
+        <PopoverTrigger
+          render={
+            <Button
+              variant={inAnyCollection ? "default" : "secondary"}
+              size="sm"
+              className={stacked ? "w-full" : undefined}
+              aria-pressed={inAnyCollection}
+            />
+          }
+        >
+          <HugeiconsIcon
+            icon={inAnyCollection ? FolderCheckIcon : FolderAddIcon}
+          />
+          Collections
+        </PopoverTrigger>
+        <PopoverContent className="w-60 gap-0.5 p-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start px-2.5"
+            onClick={() => setCreateOpen(true)}
+          >
+            <HugeiconsIcon icon={PlusSignIcon} />
+            New collection
+          </Button>
+          {collections.length > 0 && (
+            <div className="my-1 h-px bg-border/50" aria-hidden />
+          )}
+          {collections.map((collection) => (
+            <label
+              key={collection._id}
+              className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium hover:bg-accent"
+            >
+              <Checkbox
+                checked={collectionIds?.has(collection._id) ?? false}
+                onCheckedChange={(checked) =>
+                  toggle(collection._id, checked === true)
+                }
+              />
+              <span className="truncate">{collection.name}</span>
+            </label>
+          ))}
+        </PopoverContent>
+      </Popover>
+      <CreateCollectionDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(collectionId) =>
+          void addItem({ collectionId, item: snapshot })
+        }
+      />
+    </>
+  )
+}
+
 function DetailsDrawer({
   item,
   state,
+  collections,
 }: {
   item: MediaItem
   state: ItemState | undefined
+  collections: CollectionSummary[]
 }) {
   const details = useAction(api.tmdb.details)
   const [open, setOpen] = useState(false)
@@ -260,7 +374,7 @@ function DetailsDrawer({
       <Button
         variant="ghost"
         size="icon-xs"
-        className="ml-auto -mr-1.5 text-muted-foreground"
+        className="-mr-1.5 ml-auto text-muted-foreground"
         aria-label={`Details for ${item.title}`}
         onClick={openDrawer}
       >
@@ -294,7 +408,12 @@ function DetailsDrawer({
                 the type/year line. Centered on the bottom sheet to match the
                 header text, left-aligned from md up. */}
             <div className="flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 md:justify-start">
-              <ItemActions item={item} state={state} layout="row" />
+              <ItemActions
+                item={item}
+                state={state}
+                collections={collections}
+                layout="row"
+              />
             </div>
             <div className="px-4 py-4 text-sm">
               {error ? (

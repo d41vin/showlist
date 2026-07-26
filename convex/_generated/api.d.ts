@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as collections from "../collections.js";
+import type * as helpers from "../helpers.js";
 import type * as items from "../items.js";
 import type * as tmdb from "../tmdb.js";
 
@@ -18,6 +20,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  collections: typeof collections;
+  helpers: typeof helpers;
   items: typeof items;
   tmdb: typeof tmdb;
 }>;
