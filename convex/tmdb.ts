@@ -87,6 +87,7 @@ export const details = action({
     numberOfEpisodes: v.union(v.number(), v.null()),
     voteAverage: v.union(v.number(), v.null()),
     releaseDate: v.union(v.string(), v.null()),
+    backdropPath: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -119,6 +120,8 @@ export const details = action({
           : null,
       voteAverage:
         typeof data.vote_average === "number" ? data.vote_average : null,
+      backdropPath:
+        typeof data.backdrop_path === "string" ? data.backdrop_path : null,
       releaseDate:
         typeof (args.mediaType === "movie"
           ? data.release_date
