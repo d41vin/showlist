@@ -1,0 +1,38 @@
+import { defineSchema, defineTable } from "convex/server"
+import { v } from "convex/values"
+
+export default defineSchema({
+  // One doc per user + TMDB title. Created lazily on first action and
+  // deleted when fully unset (no flags, no sentiment, in no collection).
+  items: defineTable({
+    userId: v.string(),
+    tmdbId: v.number(),
+    mediaType: v.union(v.literal("movie"), v.literal("tv")),
+    title: v.string(),
+    posterPath: v.union(v.string(), v.null()),
+    year: v.union(v.string(), v.null()),
+    inWatchlist: v.boolean(),
+    watched: v.boolean(),
+    sentiment: v.optional(v.union(v.literal("liked"), v.literal("disliked"))),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_mediaType_and_tmdbId", [
+      "userId",
+      "mediaType",
+      "tmdbId",
+    ]),
+
+  collections: defineTable({
+    userId: v.string(),
+    name: v.string(),
+  }).index("by_user", ["userId"]),
+
+  collectionItems: defineTable({
+    collectionId: v.id("collections"),
+    itemId: v.id("items"),
+  })
+    .index("by_collection", ["collectionId"])
+    .index("by_item", ["itemId"])
+    .index("by_collection_and_item", ["collectionId", "itemId"]),
+})
