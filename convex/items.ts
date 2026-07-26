@@ -1,75 +1,19 @@
 import { v } from "convex/values"
 
-import { type Doc } from "./_generated/dataModel"
-import { mutation, query, type MutationCtx } from "./_generated/server"
+import { mutation, query } from "./_generated/server"
+import {
+  deleteIfFullyUnset,
+  findItem,
+  itemDocValidator,
+  requireUserId,
+} from "./helpers"
 import { searchResultValidator } from "./tmdb"
-
-async function requireUserId(ctx: { auth: MutationCtx["auth"] }) {
-  const identity = await ctx.auth.getUserIdentity()
-  if (identity === null) {
-    throw new Error("Not signed in")
-  }
-  return identity.tokenIdentifier
-}
-
-type Snapshot = {
-  tmdbId: number
-  mediaType: "movie" | "tv"
-  title: string
-  posterPath: string | null
-  year: string | null
-}
-
-async function findItem(ctx: MutationCtx, userId: string, snapshot: Snapshot) {
-  return await ctx.db
-    .query("items")
-    .withIndex("by_user_and_mediaType_and_tmdbId", (q) =>
-      q
-        .eq("userId", userId)
-        .eq("mediaType", snapshot.mediaType)
-        .eq("tmdbId", snapshot.tmdbId)
-    )
-    .unique()
-}
-
-// Cleanup rule: an item doc with no flags, no sentiment and no collection
-// membership has no reason to exist — delete it.
-async function deleteIfFullyUnset(ctx: MutationCtx, doc: Doc<"items">) {
-  if (doc.inWatchlist || doc.watched || doc.sentiment !== undefined) {
-    return
-  }
-  const membership = await ctx.db
-    .query("collectionItems")
-    .withIndex("by_item", (q) => q.eq("itemId", doc._id))
-    .first()
-  if (membership !== null) {
-    return
-  }
-  await ctx.db.delete("items", doc._id)
-}
 
 // All the user's items in one small list; the client filters
 // watchlist/watched and maps state onto search results (see project brief).
 export const listMine = query({
   args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("items"),
-      _creationTime: v.number(),
-      userId: v.string(),
-      tmdbId: v.number(),
-      mediaType: v.union(v.literal("movie"), v.literal("tv")),
-      title: v.string(),
-      posterPath: v.union(v.string(), v.null()),
-      year: v.union(v.string(), v.null()),
-      inWatchlist: v.boolean(),
-      watched: v.boolean(),
-      sentiment: v.optional(
-        v.union(v.literal("liked"), v.literal("disliked"))
-      ),
-      updatedAt: v.number(),
-    })
-  ),
+  returns: v.array(itemDocValidator),
   handler: async (ctx) => {
     const userId = await requireUserId(ctx)
     return await ctx.db
