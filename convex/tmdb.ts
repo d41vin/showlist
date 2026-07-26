@@ -71,7 +71,9 @@ export const search = action({
         mediaType: r.media_type as "movie" | "tv",
         title: String(r.media_type === "movie" ? r.title : r.name),
         posterPath: typeof r.poster_path === "string" ? r.poster_path : null,
-        year: yearOf(r.media_type === "movie" ? r.release_date : r.first_air_date),
+        year: yearOf(
+          r.media_type === "movie" ? r.release_date : r.first_air_date
+        ),
       }))
   },
 })
