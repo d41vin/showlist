@@ -66,9 +66,12 @@ export const search = action({
     })
     const results = Array.isArray(data.results) ? data.results : []
     const items = results
+      // Keep movies/tv only; also drop anything TMDB flags as adult, in case
+      // a pornographic title slips past include_adult=false via bad tagging.
       .filter(
         (r: Record<string, unknown>) =>
-          r.media_type === "movie" || r.media_type === "tv"
+          (r.media_type === "movie" || r.media_type === "tv") &&
+          r.adult !== true
       )
       .map((r: Record<string, unknown>) => ({
         tmdbId: r.id as number,
