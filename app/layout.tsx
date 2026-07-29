@@ -7,9 +7,9 @@ import {
 } from "@clerk/nextjs"
 import { shadcn } from "@clerk/ui/themes"
 import { Geist_Mono, Inter } from "next/font/google"
-import Link from "next/link"
 
 import "@/styles/globals.css"
+import { AppHeader } from "@/components/app-header"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -44,9 +44,7 @@ export default function RootLayout({
           <ConvexClientProvider>
             <ThemeProvider>
               <header className="flex h-14 items-center justify-between gap-2 border-b px-6">
-                <Link href="/" className="font-semibold tracking-tight">
-                  ShowList
-                </Link>
+                <AppHeader />
                 <div className="flex items-center gap-2">
                   <ThemeToggle />
                   <Show when="signed-out">
