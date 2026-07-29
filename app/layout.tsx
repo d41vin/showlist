@@ -38,7 +38,7 @@ export default function RootLayout({
         inter.variable
       )}
     >
-      <body>
+      <body suppressHydrationWarning>
         <ClerkProvider appearance={{ theme: shadcn }}>
           <ConvexClientProvider>
             <ThemeProvider>
