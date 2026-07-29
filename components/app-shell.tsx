@@ -59,8 +59,11 @@ export function AppShell() {
   const [results, setResults] = useState<{
     query: string
     items: MediaItem[]
+    page: number
+    hasMore: boolean
   } | null>(null)
   const [errorQuery, setErrorQuery] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   // Guards against out-of-order responses from overlapping searches.
   const requestIdRef = useRef(0)
 
@@ -74,9 +77,9 @@ export function AppShell() {
     }
     const timeout = setTimeout(async () => {
       try {
-        const items = await search({ query: trimmedQuery })
+        const { items, hasMore } = await search({ query: trimmedQuery })
         if (requestIdRef.current === requestId) {
-          setResults({ query: trimmedQuery, items })
+          setResults({ query: trimmedQuery, items, page: 1, hasMore })
         }
       } catch {
         if (requestIdRef.current === requestId) {
@@ -86,6 +89,45 @@ export function AppShell() {
     }, SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(timeout)
   }, [trimmedQuery, searchActive, isAuthenticated, search])
+
+  // Appends the next TMDB page to the current results. Failures keep the
+  // grid and button intact so the user can simply try again.
+  const loadMore = async () => {
+    if (results === null || !results.hasMore || loadingMore) {
+      return
+    }
+    const requestId = requestIdRef.current
+    const nextPage = results.page + 1
+    setLoadingMore(true)
+    try {
+      const { items, hasMore } = await search({
+        query: results.query,
+        page: nextPage,
+      })
+      if (requestIdRef.current === requestId) {
+        setResults((prev) => {
+          if (prev === null || prev.query !== results.query) {
+            return prev
+          }
+          // TMDB pages can shift between requests; drop duplicate titles.
+          const seen = new Set(prev.items.map(mediaKey))
+          return {
+            ...prev,
+            items: [
+              ...prev.items,
+              ...items.filter((item) => !seen.has(mediaKey(item))),
+            ],
+            page: nextPage,
+            hasMore,
+          }
+        })
+      }
+    } catch {
+      // Ignored — see comment above.
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   // Saved state per title, mapped onto search results and list grids.
   const stateByKey = useMemo(() => {
@@ -125,7 +167,7 @@ export function AppShell() {
     collections.find((c) => c._id === selectedCollectionId) ?? null
 
   const currentResults =
-    results !== null && results.query === trimmedQuery ? results.items : null
+    results !== null && results.query === trimmedQuery ? results : null
   const currentError = errorQuery === trimmedQuery
   const searching = searchActive && currentResults === null && !currentError
 
@@ -159,10 +201,13 @@ export function AppShell() {
       <div className="mt-8">
         {searchActive ? (
           <SearchResults
-            results={currentResults}
+            results={currentResults?.items ?? null}
             searching={searching}
             error={currentError}
             query={trimmedQuery}
+            hasMore={currentResults?.hasMore ?? false}
+            loadingMore={loadingMore}
+            onLoadMore={loadMore}
             {...gridProps}
           />
         ) : (
@@ -483,12 +528,18 @@ function SearchResults({
   searching,
   error,
   query,
+  hasMore,
+  loadingMore,
+  onLoadMore,
   ...gridProps
 }: {
   results: MediaItem[] | null
   searching: boolean
   error: boolean
   query: string
+  hasMore: boolean
+  loadingMore: boolean
+  onLoadMore: () => void
 } & GridStateProps) {
   if (searching) {
     return <GridSkeleton />
@@ -504,10 +555,19 @@ function SearchResults({
     return null
   }
   return (
-    <CardGrid
-      items={results}
-      emptyMessage={`No movies or shows found for "${query}".`}
-      {...gridProps}
-    />
+    <>
+      <CardGrid
+        items={results}
+        emptyMessage={`No movies or shows found for "${query}".`}
+        {...gridProps}
+      />
+      {results.length > 0 && hasMore && (
+        <div className="mt-8 flex justify-center">
+          <Button variant="outline" onClick={onLoadMore} disabled={loadingMore}>
+            {loadingMore ? "Loading..." : "Load more"}
+          </Button>
+        </div>
+      )}
+    </>
   )
 }

@@ -43,8 +43,11 @@ function yearOf(date: unknown): string | null {
 }
 
 export const search = action({
-  args: { query: v.string() },
-  returns: v.array(searchResultValidator),
+  args: { query: v.string(), page: v.optional(v.number()) },
+  returns: v.object({
+    items: v.array(searchResultValidator),
+    hasMore: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) {
@@ -52,16 +55,17 @@ export const search = action({
     }
     const query = args.query.trim()
     if (query === "") {
-      return []
+      return { items: [], hasMore: false }
     }
+    const page = args.page ?? 1
     const data = await tmdbFetch("/search/multi", {
       query,
       include_adult: "false",
       language: "en-US",
-      page: "1",
+      page: String(page),
     })
     const results = Array.isArray(data.results) ? data.results : []
-    return results
+    const items = results
       .filter(
         (r: Record<string, unknown>) =>
           r.media_type === "movie" || r.media_type === "tv"
@@ -75,6 +79,9 @@ export const search = action({
           r.media_type === "movie" ? r.release_date : r.first_air_date
         ),
       }))
+    const totalPages =
+      typeof data.total_pages === "number" ? data.total_pages : page
+    return { items, hasMore: page < totalPages }
   },
 })
 
