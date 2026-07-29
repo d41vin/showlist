@@ -12,6 +12,7 @@ import Link from "next/link"
 import "@/styles/globals.css"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -47,6 +48,7 @@ export default function RootLayout({
                   ShowList
                 </Link>
                 <div className="flex items-center gap-2">
+                  <ThemeToggle />
                   <Show when="signed-out">
                     <SignInButton>
                       <Button variant="ghost" size="sm">
