@@ -13,6 +13,14 @@ export default defineSchema({
     year: v.union(v.string(), v.null()),
     inWatchlist: v.boolean(),
     watched: v.boolean(),
+    // Optional because it was added after launch; undefined means false.
+    watching: v.optional(v.boolean()),
+    // When each status was last turned on — tabs sort by these so toggling
+    // one status never reorders the other tabs. Unset while the status is
+    // off (and on docs predating the fields).
+    watchlistAt: v.optional(v.number()),
+    watchedAt: v.optional(v.number()),
+    watchingAt: v.optional(v.number()),
     sentiment: v.optional(v.union(v.literal("liked"), v.literal("disliked"))),
     updatedAt: v.number(),
   })

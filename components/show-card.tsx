@@ -9,6 +9,8 @@ import {
   FolderCheckIcon,
   ImageNotFound01Icon,
   MoreHorizontalIcon,
+  PlayCircle02Icon,
+  PlayIcon,
   PlusSignIcon,
   StarIcon,
   ThumbsDownIcon,
@@ -164,6 +166,7 @@ function ItemActions({
 }) {
   const toggleWatchlist = useMutation(api.items.toggleWatchlist)
   const toggleWatched = useMutation(api.items.toggleWatched)
+  const toggleWatching = useMutation(api.items.toggleWatching)
   const setSentiment = useMutation(api.items.setSentiment)
 
   // Mutations only accept the exact snapshot shape, so rebuild it — list
@@ -178,6 +181,7 @@ function ItemActions({
 
   const inWatchlist = state?.inWatchlist ?? false
   const watched = state?.watched ?? false
+  const watching = state?.watching ?? false
   const sentiment = state?.sentiment
   const stacked = layout === "stack"
 
@@ -204,6 +208,16 @@ function ItemActions({
       >
         <HugeiconsIcon icon={watched ? CheckmarkCircle02Icon : EyeIcon} />
         Watched
+      </Button>
+      <Button
+        variant={watching ? "default" : "secondary"}
+        size="sm"
+        className={stacked ? "w-full" : undefined}
+        aria-pressed={watching}
+        onClick={() => toggleWatching({ item: snapshot })}
+      >
+        <HugeiconsIcon icon={watching ? PlayCircle02Icon : PlayIcon} />
+        Watching
       </Button>
       <CollectionsPopover
         snapshot={snapshot}

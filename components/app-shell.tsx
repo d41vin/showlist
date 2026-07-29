@@ -142,6 +142,7 @@ export function AppShell() {
       map.set(mediaKey(item), {
         itemId: item._id,
         inWatchlist: item.inWatchlist,
+        watching: item.watching ?? false,
         watched: item.watched,
         sentiment: item.sentiment,
         collectionIds: idsByItem.get(item._id) ?? new Set(),
@@ -151,11 +152,27 @@ export function AppShell() {
   }, [myItems, memberships])
 
   const watchlistItems = useMemo(
-    () => sortRecent((myItems ?? []).filter((i) => i.inWatchlist)),
+    () =>
+      sortByAddedAt(
+        (myItems ?? []).filter((i) => i.inWatchlist),
+        (i) => i.watchlistAt
+      ),
+    [myItems]
+  )
+  const watchingItems = useMemo(
+    () =>
+      sortByAddedAt(
+        (myItems ?? []).filter((i) => i.watching === true),
+        (i) => i.watchingAt
+      ),
     [myItems]
   )
   const watchedItems = useMemo(
-    () => sortRecent((myItems ?? []).filter((i) => i.watched)),
+    () =>
+      sortByAddedAt(
+        (myItems ?? []).filter((i) => i.watched),
+        (i) => i.watchedAt
+      ),
     [myItems]
   )
   const collections = useMemo(
@@ -223,6 +240,7 @@ export function AppShell() {
             <TabsList className="mx-auto">
               <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
               <TabsTrigger value="watched">Watched</TabsTrigger>
+              <TabsTrigger value="watching">Watching</TabsTrigger>
               <TabsTrigger value="collections">Collections</TabsTrigger>
             </TabsList>
             <TabsContent value="watchlist" className="mt-6">
@@ -238,6 +256,14 @@ export function AppShell() {
                 items={watchedItems}
                 loading={myItems === undefined}
                 emptyMessage="Nothing marked as watched yet — toggle Watched on any card."
+                {...gridProps}
+              />
+            </TabsContent>
+            <TabsContent value="watching" className="mt-6">
+              <CardGrid
+                items={watchingItems}
+                loading={myItems === undefined}
+                emptyMessage="Nothing in progress yet — toggle Watching on any card."
                 {...gridProps}
               />
             </TabsContent>
@@ -291,8 +317,16 @@ type GridStateProps = {
   onActiveCardKeyChange: (key: string | null) => void
 }
 
-function sortRecent<T extends { updatedAt: number }>(items: T[]) {
-  return items.sort((a, b) => b.updatedAt - a.updatedAt)
+// Most recently added to the given status first. The per-status timestamp
+// wins; docs from before those fields existed fall back to doc creation
+// time. Toggling other statuses never reorders a tab.
+function sortByAddedAt<T extends { _creationTime: number }>(
+  items: T[],
+  addedAt: (item: T) => number | undefined
+) {
+  return items.sort(
+    (a, b) => (addedAt(b) ?? b._creationTime) - (addedAt(a) ?? a._creationTime)
+  )
 }
 
 const GRID_CLASS =

@@ -41,7 +41,12 @@ export async function findItem(
 // Cleanup rule: an item doc with no flags, no sentiment and no collection
 // membership has no reason to exist — delete it.
 export async function deleteIfFullyUnset(ctx: MutationCtx, doc: Doc<"items">) {
-  if (doc.inWatchlist || doc.watched || doc.sentiment !== undefined) {
+  if (
+    doc.inWatchlist ||
+    doc.watched ||
+    doc.watching === true ||
+    doc.sentiment !== undefined
+  ) {
     return
   }
   const membership = await ctx.db
@@ -67,6 +72,10 @@ export const itemDocValidator = v.object({
   year: v.union(v.string(), v.null()),
   inWatchlist: v.boolean(),
   watched: v.boolean(),
+  watching: v.optional(v.boolean()),
+  watchlistAt: v.optional(v.number()),
+  watchedAt: v.optional(v.number()),
+  watchingAt: v.optional(v.number()),
   sentiment: v.optional(v.union(v.literal("liked"), v.literal("disliked"))),
   updatedAt: v.number(),
 })

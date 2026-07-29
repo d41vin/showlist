@@ -10,7 +10,8 @@ import {
 import { searchResultValidator } from "./tmdb"
 
 // All the user's items in one small list; the client filters
-// watchlist/watched and maps state onto search results (see project brief).
+// watchlist/watching/watched and maps state onto search results (see project
+// brief).
 export const listMine = query({
   args: {},
   returns: v.array(itemDocValidator),
@@ -29,21 +30,25 @@ export const toggleWatchlist = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx)
     const doc = await findItem(ctx, userId, args.item)
+    const now = Date.now()
     if (doc === null) {
       await ctx.db.insert("items", {
         userId,
         ...args.item,
         inWatchlist: true,
         watched: false,
-        updatedAt: Date.now(),
+        watchlistAt: now,
+        updatedAt: now,
       })
       return null
     }
+    const next = !doc.inWatchlist
     await ctx.db.patch("items", doc._id, {
-      inWatchlist: !doc.inWatchlist,
-      updatedAt: Date.now(),
+      inWatchlist: next,
+      watchlistAt: next ? now : undefined,
+      updatedAt: now,
     })
-    await deleteIfFullyUnset(ctx, { ...doc, inWatchlist: !doc.inWatchlist })
+    await deleteIfFullyUnset(ctx, { ...doc, inWatchlist: next })
     return null
   },
 })
@@ -54,21 +59,55 @@ export const toggleWatched = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx)
     const doc = await findItem(ctx, userId, args.item)
+    const now = Date.now()
     if (doc === null) {
       await ctx.db.insert("items", {
         userId,
         ...args.item,
         inWatchlist: false,
         watched: true,
-        updatedAt: Date.now(),
+        watchedAt: now,
+        updatedAt: now,
       })
       return null
     }
+    const next = !doc.watched
     await ctx.db.patch("items", doc._id, {
-      watched: !doc.watched,
-      updatedAt: Date.now(),
+      watched: next,
+      watchedAt: next ? now : undefined,
+      updatedAt: now,
     })
-    await deleteIfFullyUnset(ctx, { ...doc, watched: !doc.watched })
+    await deleteIfFullyUnset(ctx, { ...doc, watched: next })
+    return null
+  },
+})
+
+export const toggleWatching = mutation({
+  args: { item: searchResultValidator },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx)
+    const doc = await findItem(ctx, userId, args.item)
+    const now = Date.now()
+    if (doc === null) {
+      await ctx.db.insert("items", {
+        userId,
+        ...args.item,
+        inWatchlist: false,
+        watched: false,
+        watching: true,
+        watchingAt: now,
+        updatedAt: now,
+      })
+      return null
+    }
+    const next = doc.watching !== true
+    await ctx.db.patch("items", doc._id, {
+      watching: next,
+      watchingAt: next ? now : undefined,
+      updatedAt: now,
+    })
+    await deleteIfFullyUnset(ctx, { ...doc, watching: next })
     return null
   },
 })

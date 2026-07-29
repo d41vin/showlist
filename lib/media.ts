@@ -39,6 +39,7 @@ export type CollectionPreview = CollectionSummary & {
 export type ItemState = {
   itemId: Id<"items">
   inWatchlist: boolean
+  watching: boolean
   watched: boolean
   sentiment?: Sentiment
   collectionIds: ReadonlySet<Id<"collections">>
