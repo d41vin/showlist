@@ -100,20 +100,33 @@ export const details = action({
     voteAverage: v.union(v.number(), v.null()),
     releaseDate: v.union(v.string(), v.null()),
     backdropPath: v.union(v.string(), v.null()),
+    logoPath: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) {
       throw new Error("Not signed in")
     }
-    const data = await tmdbFetch(`/${args.mediaType}/${args.tmdbId}`, {
-      language: "en-US",
-    })
+    const [data, imagesData] = await Promise.all([
+      tmdbFetch(`/${args.mediaType}/${args.tmdbId}`, { language: "en-US" }),
+      tmdbFetch(`/${args.mediaType}/${args.tmdbId}/images`, {
+        include_image_language: "en,null",
+      }),
+    ])
     const genres = Array.isArray(data.genres)
       ? data.genres
           .map((g: Record<string, unknown>) => g.name)
           .filter((name): name is string => typeof name === "string")
-      : []
+      : [];
+    const logos = Array.isArray(imagesData.logos) ? imagesData.logos : []
+    const logo =
+      logos.find((l: Record<string, unknown>) => l.iso_639_1 === "en") ??
+      logos[0] ??
+      null
+    const logoPath =
+      logo && typeof (logo as Record<string, unknown>).file_path === "string"
+        ? ((logo as Record<string, unknown>).file_path as string)
+        : null
     return {
       overview: typeof data.overview === "string" ? data.overview : null,
       tagline:
@@ -144,6 +157,116 @@ export const details = action({
                 : data.first_air_date
             )
           : null,
+      logoPath,
     }
+  },
+})
+
+// ---------------------------------------------------------------------------
+// Discovery helpers & actions
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared normaliser: filters adult & non-movie/tv entries, then maps raw TMDB
+ * results into the searchResultValidator shape.  `inferredType` is used when
+ * the API response does not carry a `media_type` field (i.e. every endpoint
+ * except `/trending/all/week`).
+ */
+function normalizeResults(
+  results: Record<string, unknown>[],
+  inferredType?: "movie" | "tv",
+) {
+  return results
+    .filter(
+      (r) =>
+        (inferredType !== undefined
+          ? r.media_type === undefined || r.media_type === inferredType
+          : r.media_type === "movie" || r.media_type === "tv") &&
+        r.adult !== true,
+    )
+    .map((r) => {
+      const mediaType = (r.media_type as "movie" | "tv" | undefined) ?? inferredType!
+      return {
+        tmdbId: r.id as number,
+        mediaType,
+        title: String(mediaType === "movie" ? r.title : r.name),
+        posterPath: typeof r.poster_path === "string" ? r.poster_path : null,
+        year: yearOf(
+          mediaType === "movie" ? r.release_date : r.first_air_date,
+        ),
+      }
+    })
+}
+
+export const discoverTrending = action({
+  args: {
+    mediaType: v.union(
+      v.literal("all"),
+      v.literal("movie"),
+      v.literal("tv"),
+    ),
+  },
+  returns: v.array(searchResultValidator),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const data = await tmdbFetch(`/trending/${args.mediaType}/week`, {
+      language: "en-US",
+    })
+    const results = Array.isArray(data.results) ? data.results : []
+    // /trending/all/week includes media_type; /trending/movie|tv/week does not.
+    const inferredType =
+      args.mediaType === "all" ? undefined : (args.mediaType as "movie" | "tv")
+    return normalizeResults(results, inferredType)
+  },
+})
+
+export const discoverPopular = action({
+  args: { mediaType: mediaTypeValidator },
+  returns: v.array(searchResultValidator),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const data = await tmdbFetch(`/${args.mediaType}/popular`, {
+      language: "en-US",
+    })
+    const results = Array.isArray(data.results) ? data.results : []
+    return normalizeResults(results, args.mediaType)
+  },
+})
+
+export const discoverTopRated = action({
+  args: { mediaType: mediaTypeValidator },
+  returns: v.array(searchResultValidator),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const data = await tmdbFetch(`/${args.mediaType}/top_rated`, {
+      language: "en-US",
+    })
+    const results = Array.isArray(data.results) ? data.results : []
+    return normalizeResults(results, args.mediaType)
+  },
+})
+
+export const discoverNowPlaying = action({
+  args: { mediaType: mediaTypeValidator },
+  returns: v.array(searchResultValidator),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const path =
+      args.mediaType === "movie" ? "/movie/now_playing" : "/tv/airing_today"
+    const data = await tmdbFetch(path, { language: "en-US" })
+    const results = Array.isArray(data.results) ? data.results : []
+    return normalizeResults(results, args.mediaType)
   },
 })
