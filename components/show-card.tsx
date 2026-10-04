@@ -23,6 +23,7 @@ import Image from "next/image"
 import { useEffect, useRef, useState } from "react"
 
 import { CreateCollectionDialog } from "@/components/create-collection-dialog"
+import { EpisodesSection } from "@/components/episodes-section"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -475,6 +476,14 @@ function DetailsDrawer({
                 <DrawerDetails item={item} data={data} />
               )}
             </div>
+
+            {/* Episodes (shows with seasons only) */}
+            {!error &&
+              data !== null &&
+              item.mediaType === "tv" &&
+              data.seasons.length > 0 && (
+                <EpisodesSection item={item} data={data} />
+              )}
           </div>
         </DrawerContent>
       </Drawer>

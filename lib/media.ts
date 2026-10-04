@@ -23,6 +23,11 @@ export function tmdbLogoUrl(logoPath: string) {
   return `https://image.tmdb.org/t/p/w300${logoPath}`
 }
 
+// Episode stills — small 16:9 thumbnails in episode lists.
+export function tmdbStillUrl(stillPath: string) {
+  return `https://image.tmdb.org/t/p/w185${stillPath}`
+}
+
 export type Sentiment = "liked" | "disliked"
 
 // A user collection as list/menu entries need it (from collections.listMine).
