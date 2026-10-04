@@ -41,6 +41,7 @@ import { api } from "@/convex/_generated/api"
 import { type Id } from "@/convex/_generated/dataModel"
 import {
   tmdbBackdropUrl,
+  tmdbLogoUrl,
   tmdbPosterUrl,
   type CollectionSummary,
   type ItemState,
@@ -397,39 +398,73 @@ function DetailsDrawer({
       <Drawer open={open} onOpenChange={setOpen} showSwipeHandle>
         <DrawerContent>
           <div className="mx-auto flex min-h-0 w-full max-w-lg flex-col overflow-y-auto">
-            {/* Backdrop on top; placeholder while loading keeps layout stable. */}
-            {data === null && !error ? (
-              <div className="mx-4 mt-2 aspect-video shrink-0 animate-pulse rounded-lg bg-muted" />
-            ) : data?.backdropPath ? (
-              <div className="relative mx-4 mt-2 aspect-video shrink-0 overflow-hidden rounded-lg bg-muted">
-                <Image
-                  src={tmdbBackdropUrl(data.backdropPath)}
-                  alt={`${item.title} backdrop`}
-                  fill
-                  sizes="(max-width: 640px) 100vw, 512px"
-                  className="object-cover"
+            {/* Backdrop header — tall, overblown image that cuts cleanly
+                where the details section begins. Drawer's overflow-hidden
+                clips the image to the rounded corners on the sides. */}
+            <div className="relative shrink-0 overflow-hidden">
+              {/* Backdrop image */}
+              {data === null && !error ? (
+                <div className="aspect-[16/9] w-full shrink-0 animate-pulse bg-muted" />
+              ) : data?.backdropPath ? (
+                <div className="relative aspect-[4/3] w-full shrink-0 bg-muted">
+                  <Image
+                    src={tmdbBackdropUrl(data.backdropPath)}
+                    alt={`${item.title} backdrop`}
+                    fill
+                    sizes="640px"
+                    className="object-cover"
+                    priority
+                  />
+                </div>
+              ) : (
+                <div className="aspect-[16/9] w-full shrink-0 bg-muted" />
+              )}
+
+              {/* Logo + metadata overlaid at the bottom of the backdrop */}
+              {data !== null && !error && (
+                <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 px-5 pb-4 pt-16 bg-gradient-to-t from-black/50 to-transparent">
+                  {data.logoPath ? (
+                    <Image
+                      src={tmdbLogoUrl(data.logoPath)}
+                      alt={item.title}
+                      width={220}
+                      height={80}
+                      sizes="220px"
+                      className="mx-auto max-h-16 w-auto max-w-[70%] object-contain drop-shadow-lg"
+                      priority
+                    />
+                  ) : (
+                    <DrawerTitle className="text-xl font-bold text-white drop-shadow-lg">
+                      {item.title}
+                    </DrawerTitle>
+                  )}
+                  <DrawerHeader className="p-0 text-center">
+                    <DrawerTitle className={data.logoPath ? "sr-only" : "hidden"}>
+                      {item.title}
+                    </DrawerTitle>
+                    <DrawerDescription className="text-white/70">
+                      {item.mediaType === "movie" ? "Movie" : "Show"}
+                      {item.year ? ` · ${item.year}` : ""}
+                    </DrawerDescription>
+                  </DrawerHeader>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            {data !== null && !error && (
+              <div className="flex flex-wrap items-center justify-center gap-1.5 px-5 pt-3 md:justify-start">
+                <ItemActions
+                  item={item}
+                  state={state}
+                  collections={collections}
+                  layout="row"
                 />
               </div>
-            ) : null}
-            <DrawerHeader>
-              <DrawerTitle>{item.title}</DrawerTitle>
-              <DrawerDescription>
-                {item.mediaType === "movie" ? "Movie" : "Show"}
-                {item.year ? ` · ${item.year}` : ""}
-              </DrawerDescription>
-            </DrawerHeader>
-            {/* The same in-app actions as the card overlay, as a row under
-                the type/year line. Centered on the bottom sheet to match the
-                header text, left-aligned from md up. */}
-            <div className="flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 md:justify-start">
-              <ItemActions
-                item={item}
-                state={state}
-                collections={collections}
-                layout="row"
-              />
-            </div>
-            <div className="px-4 py-4 text-sm">
+            )}
+
+            {/* Details */}
+            <div className="px-5 py-4 text-sm">
               {error ? (
                 <p className="text-muted-foreground">
                   Couldn&rsquo;t load details. Close and try again.
@@ -469,7 +504,7 @@ function DrawerDetails({ item, data }: { item: MediaItem; data: ShowDetails }) {
   return (
     <div className="flex flex-col gap-3">
       {facts.length > 0 && (
-        <p className="flex items-center gap-1.5 text-muted-foreground">
+        <p className="flex items-center gap-1.5 text-shadow-sm text-muted-foreground">
           {data.voteAverage !== null && (
             <HugeiconsIcon icon={StarIcon} className="size-3.5" />
           )}
@@ -477,11 +512,11 @@ function DrawerDetails({ item, data }: { item: MediaItem; data: ShowDetails }) {
         </p>
       )}
       {data.genres.length > 0 && (
-        <p className="text-muted-foreground">{data.genres.join(", ")}</p>
+        <p className="text-shadow-sm text-muted-foreground">{data.genres.join(", ")}</p>
       )}
-      {data.tagline !== null && <p className="italic">{data.tagline}</p>}
+      {data.tagline !== null && <p className="text-shadow-sm italic">{data.tagline}</p>}
       {data.overview !== null && data.overview !== "" ? (
-        <p className="leading-relaxed">{data.overview}</p>
+        <p className="text-shadow-sm leading-relaxed">{data.overview}</p>
       ) : (
         <p className="text-muted-foreground">No overview available.</p>
       )}

@@ -15,6 +15,12 @@ how to correctly use Convex APIs and patterns. The file contains rules that
 override what you may have learned about Convex from training data.
 
 Convex agent skills for common tasks can be installed by running
-`npx convex ai-files install`.
+`pnpx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+This project uses pnpm as package manager.
+
+Design philosophy: minimal, no custom design work — use shadcn/ui components **as-is**
+with the existing `styles/globals.css` and `components.json` config (style `base-luma`, hugeicons icon library).
+No new design systems, no custom CSS beyond layout utility classes.

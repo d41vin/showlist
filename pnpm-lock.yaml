@@ -54,6 +54,9 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0
     devDependencies:
+      '@keelcode-ai/keelcode':
+        specifier: ^0.1.11
+        version: 0.1.11
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.3
@@ -791,6 +794,54 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@keelcode-ai/keelcode@0.1.11':
+    resolution: {integrity: sha512-+6SQnCC/Rpth3HYN50oGt74xgTpjFjuDJPBCh3155U099wNGsxT+0fzLJDdqvcUA4tRGpq5bEx/6b9qlnL3L3w==}
+    hasBin: true
+
+  '@keelcode-ai/keelcode@0.1.11-darwin-arm64':
+    resolution: {integrity: sha512-CankjW/uh2Vu4IJri/vXGAEqE4UAvsoQs10fUn/7wmdhTjjYgkSmBNnDW7NDZ+iCA3/uBdvKBiPt/GfhVq85wg==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@keelcode-ai/keelcode@0.1.11-darwin-x64':
+    resolution: {integrity: sha512-txv7c4LKcrdN+2Y4m3uyrxKMle/tpryMt8Zs3/4zp9pTK/MEVisQK7/lPw1dEJnRCxIzjm5IDt3SPcLrjOZ+Dw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@keelcode-ai/keelcode@0.1.11-linux-arm64':
+    resolution: {integrity: sha512-l9eK54VyZL1BAKZBMsAKp4FRCbWGM8sHhFnItewN+jv5mqWgqb054BSjrHmJgY5loxN2LyD21jX+gPvyEty+tw==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@keelcode-ai/keelcode@0.1.11-linux-arm64-musl':
+    resolution: {integrity: sha512-AbxEBtvqa/6ogzRuhM/77rvDIHQVs/VLoV3jRyE1XcL5DD2cRW5LVX/WoNmPMt042dx0o0SoG1jIaGeo1r5vfg==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@keelcode-ai/keelcode@0.1.11-linux-x64':
+    resolution: {integrity: sha512-484xEOtk5QN7BufZUw2TSjhFCDVEITINu8Et9L/1q9kaCuDqRA1A+B9afsiZufDFuhCwBNQUkXqORgdR53BiCA==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@keelcode-ai/keelcode@0.1.11-linux-x64-musl':
+    resolution: {integrity: sha512-NrfhqdBeHY5Bce+9nVVvh6+oCNHNUp6bzWdbMJlUum09vw8WDtAbCol24I+3yf1K+GAH9a06h4eXB9W+HCcdYw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@keelcode-ai/keelcode@0.1.11-win32-arm64':
+    resolution: {integrity: sha512-Lm8NxZnzpEtKTpQfLxD0p0ID6QBOzzJaXVPHESsGNk7F4TG4ttFvuTWAQnpDKHMqcmVgoeyFr81TzDWGiNc1Bg==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@keelcode-ai/keelcode@0.1.11-win32-x64':
+    resolution: {integrity: sha512-O4cxlFAUYaqVR2b7GrMfXVmEH2Wi7HLp0q9fLvhRL6e6V0w19uuqe+9IWZ58xksTlga5oN9FG54CFKAAw/pm/w==}
+    cpu: [x64]
+    os: [win32]
 
   '@modelcontextprotocol/sdk@1.29.0':
     resolution: {integrity: sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==}
@@ -5342,6 +5393,41 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@keelcode-ai/keelcode@0.1.11':
+    optionalDependencies:
+      '@keelcode-ai/keelcode-darwin-arm64': '@keelcode-ai/keelcode@0.1.11-darwin-arm64'
+      '@keelcode-ai/keelcode-darwin-x64': '@keelcode-ai/keelcode@0.1.11-darwin-x64'
+      '@keelcode-ai/keelcode-linux-arm64': '@keelcode-ai/keelcode@0.1.11-linux-arm64'
+      '@keelcode-ai/keelcode-linux-arm64-musl': '@keelcode-ai/keelcode@0.1.11-linux-arm64-musl'
+      '@keelcode-ai/keelcode-linux-x64': '@keelcode-ai/keelcode@0.1.11-linux-x64'
+      '@keelcode-ai/keelcode-linux-x64-musl': '@keelcode-ai/keelcode@0.1.11-linux-x64-musl'
+      '@keelcode-ai/keelcode-win32-arm64': '@keelcode-ai/keelcode@0.1.11-win32-arm64'
+      '@keelcode-ai/keelcode-win32-x64': '@keelcode-ai/keelcode@0.1.11-win32-x64'
+
+  '@keelcode-ai/keelcode@0.1.11-darwin-arm64':
+    optional: true
+
+  '@keelcode-ai/keelcode@0.1.11-darwin-x64':
+    optional: true
+
+  '@keelcode-ai/keelcode@0.1.11-linux-arm64':
+    optional: true
+
+  '@keelcode-ai/keelcode@0.1.11-linux-arm64-musl':
+    optional: true
+
+  '@keelcode-ai/keelcode@0.1.11-linux-x64':
+    optional: true
+
+  '@keelcode-ai/keelcode@0.1.11-linux-x64-musl':
+    optional: true
+
+  '@keelcode-ai/keelcode@0.1.11-win32-arm64':
+    optional: true
+
+  '@keelcode-ai/keelcode@0.1.11-win32-x64':
+    optional: true
+
   '@modelcontextprotocol/sdk@1.29.0(zod@3.25.76)':
     dependencies:
       '@hono/node-server': 1.19.15(hono@4.12.32)
@@ -8947,7 +9033,7 @@ snapshots:
 
   rpc-websockets@9.3.9:
     dependencies:
-      '@swc/helpers': 0.5.15
+      '@swc/helpers': 0.5.21
       '@types/uuid': 10.0.0
       '@types/ws': 8.18.1
       buffer: 6.0.3

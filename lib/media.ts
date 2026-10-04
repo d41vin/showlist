@@ -19,6 +19,10 @@ export function tmdbBackdropUrl(backdropPath: string) {
   return `https://image.tmdb.org/t/p/w780${backdropPath}`
 }
 
+export function tmdbLogoUrl(logoPath: string) {
+  return `https://image.tmdb.org/t/p/w300${logoPath}`
+}
+
 export type Sentiment = "liked" | "disliked"
 
 // A user collection as list/menu entries need it (from collections.listMine).
