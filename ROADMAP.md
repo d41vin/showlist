@@ -4,6 +4,9 @@
 > merge into `main` at the end (cherry-pick / rebase-drop what the user
 > rejects). This file is the plan of record; `handoff.md` gets the session
 > log at the end.
+>
+> **Status (2026-10-04): all five phases shipped on this branch.**
+> Findings deliberately left for later live in `plans/README.md`.
 
 ## Vision
 

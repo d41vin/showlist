@@ -3,7 +3,7 @@
 import { AiMagicIcon, RefreshIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useQuery } from "convex/react"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 import { ShowCard } from "@/components/show-card"
 import { useResolveRecommendations } from "@/components/use-ai-resolve"
@@ -30,8 +30,8 @@ type ItemForPrompt = {
 }
 
 // "For you" row on Discover: AI picks reasoned from the user's library,
-// resolved into real cards. Nothing renders until the user adds a key in
-// settings (a quiet hint row appears instead).
+// resolved into real cards. Generation is explicit (the key is the user's
+// own and calls cost their money) — nothing runs until they ask for picks.
 export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
   const config = useAiConfig()
   const resolve = useResolveRecommendations()
@@ -40,8 +40,8 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
   const myItems = useQuery(api.items.listMine, isAuthenticated ? {} : "skip")
 
   const [rows, setRows] = useState<Row[] | null>(null)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [nonce, setNonce] = useState(0)
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null)
 
   const excludeKeys = useMemo(
@@ -49,38 +49,32 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
     [myItems]
   )
 
-  useEffect(() => {
-    if (
-      config === null ||
-      myItems === undefined ||
-      rows !== null ||
-      error !== null
-    ) {
+  const generate = async () => {
+    if (config === null || myItems === undefined || loading) {
       return
     }
-    let cancelled = false
-    aiRecommendJson(FOR_YOU_SYSTEM_PROMPT, buildLibraryPrompt(myItems), config)
-      .then((recs) => resolve(recs, excludeKeys))
-      .then((resolved) => {
-        if (!cancelled) {
-          setRows(
-            resolved.map(({ rec, item }) => ({
-              key: mediaKey(item),
-              reason: rec.reason,
-              item,
-            }))
-          )
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "AI request failed.")
-        }
-      })
-    return () => {
-      cancelled = true
+    setLoading(true)
+    setError(null)
+    try {
+      const recs = await aiRecommendJson(
+        FOR_YOU_SYSTEM_PROMPT,
+        buildLibraryPrompt(myItems),
+        config
+      )
+      const resolved = await resolve(recs, excludeKeys)
+      setRows(
+        resolved.map(({ rec, item }) => ({
+          key: mediaKey(item),
+          reason: rec.reason,
+          item,
+        }))
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "AI request failed.")
+    } finally {
+      setLoading(false)
     }
-  }, [config, myItems, rows, error, nonce, resolve, excludeKeys])
+  }
 
   if (config === null) {
     return (
@@ -96,8 +90,6 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
     )
   }
 
-  const loading = rows === null && error === null
-
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -107,19 +99,23 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
         </h2>
         <Button
           variant="ghost"
-          size="icon-sm"
-          aria-label="Refresh AI picks"
-          disabled={loading}
-          onClick={() => {
-            setError(null)
-            setRows(null)
-            setNonce((n) => n + 1)
-          }}
+          size="sm"
+          className="-mr-2"
+          disabled={loading || myItems === undefined}
+          onClick={() => void generate()}
         >
           <HugeiconsIcon icon={RefreshIcon} />
+          {loading ? "Thinking…" : rows === null ? "Generate picks" : "Refresh"}
         </Button>
       </div>
-      {loading ? (
+      {error !== null ? (
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => void generate()}>
+            Try again
+          </Button>
+        </div>
+      ) : loading && rows === null ? (
         <div className="hide-scrollbar flex gap-4 overflow-x-auto pb-2">
           {Array.from({ length: 6 }, (_, i) => (
             <div
@@ -131,28 +127,18 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
             </div>
           ))}
         </div>
-      ) : error !== null ? (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-muted-foreground">{error}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setError(null)
-              setRows(null)
-              setNonce((n) => n + 1)
-            }}
-          >
-            Try again
-          </Button>
-        </div>
-      ) : (rows?.length ?? 0) === 0 ? (
+      ) : rows !== null && rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           The AI couldn&rsquo;t find matches — try again for new picks.
         </p>
+      ) : rows === null ? (
+        <p className="text-sm text-muted-foreground">
+          Recommendations based on your lists, reasoned by your AI. Generating
+          uses your key.
+        </p>
       ) : (
         <div className="hide-scrollbar flex gap-4 overflow-x-auto pb-2">
-          {rows?.map((row) => (
+          {rows.map((row) => (
             <div
               key={row.key}
               className="flex w-36 shrink-0 flex-col gap-1.5 sm:w-44"

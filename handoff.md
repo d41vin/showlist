@@ -7,6 +7,75 @@
 
 ## Status
 
+**Session 5 — Improvements sweep (branch `improvements`): COMPLETE, awaiting user verification.**
+All five roadmap phases (see `ROADMAP.md`) are implemented on the
+`improvements` branch as granular commits; `main` is untouched. The user
+tests the branch, decides what to keep, then the branch is merged (or
+pruned via rebase/cherry-pick) into `main`.
+
+## Session 5 summary — Improvements sweep (2026-10-04)
+
+Ran on branch `improvements` (baseline commit `3e114e5` on `main` first:
+user's WIP drawer redesign + agent docs). Phases:
+
+1. **Episodes backend** (`e550bdc`): `tmdbCache` table + internal batch
+   read/write (`convex/tmdb_cache.ts`, module names can't contain hyphens);
+   `tmdb.details` extended with tv `seasons`, `nextEpisode`, `lastEpisode`,
+   `status` and now cached (12h TTL, reader-checked); `tmdb.tvSeason`
+   returns one season's episodes (24h TTL); `episodeWatches` table +
+   `convex/episodes.ts` (`listForShow`, `listMine`, `toggle`, `setSeason`);
+   marking an episode lazily creates the item doc with `watching: true`;
+   `deleteIfFullyUnset` never deletes an item that has episode ticks.
+2. **Episodes UI** (`d4c11b3`): `components/episodes-section.tsx` in the
+   details drawer — season chips (defaults to airing/most recent season),
+   episode rows with stills/air dates/runtimes/one-tap ticks, per-season
+   mark-all/clear, unaired dimmed, per-season fetch cache with retry.
+3. **Schedule** (`843dc5d`): `convex/schedule.ts` action reads the shared
+   cache with a 6h freshness rule, fetches stale summaries + active-season
+   episode lists in chunks of 6, windows [today,+30d] upcoming / [-8d,today)
+   catch-up computed against the client's local date; ScheduleTab groups
+   rows under day headings with watched ticks; refetch keys off the show-id
+   set, not item mutations.
+4. **AI features** (`a44d151`): `lib/ai.ts` — OpenAI-compatible client
+   (OpenAI/OpenRouter/Gemini/custom), config in localStorage only
+   (`useSyncExternalStore`, hydration-safe); settings dialog in the header
+   (signed-in); Describe mode on home (sparkle toggle swaps the search bar);
+   For You on Discover (explicit Generate — the user's key/calls cost
+   money, nothing auto-runs); extracted `useItemStateMap` /
+   `useCollectionSummaries` hooks.
+5. **Discover redesign** (`50af7d6`): trending hero (backdrop + wordmark
+   logo + facts + action row + drawer), Top 10 ranked trending row, ShowCard
+   (full overlay + drawer) replaces inert DiscoverCard everywhere;
+   `ItemActions` + `DetailsDrawer` extracted to their own modules.
+6. **Sweep** (this commit): schedule rows open the details drawer (real
+   state/collections via shared hooks); For You made explicitly
+   user-triggered; advisor audit written to `plans/README.md` (tests,
+   cache eviction cron, schedule 200-show cap surfacing, setSeason guard);
+   README rewritten.
+
+**Verified:** backend via `npx convex run` with mock identity (details
+returns seasons/next/last; toggle round-trip + watching flag; schedule
+returns [] for ended shows and full upcoming lists for a daily show).
+`pnpm typecheck`, `pnpm lint`, `pnpm build` all clean; convex deploys clean.
+**Not verified in-browser (Clerk bot challenge blocks automation):** the
+signed-in UI flows — the user walks these on the branch.
+
+**Known issues / warnings for next session**
+
+- Two QA docs on the dev deployment owned by mock identity
+  `https://qa.example.com|qa-s3`: the old "QA-Test" collection and a
+  "Breaking Bad" item with `watching: true` from episode-toggle testing.
+  Invisible to real users; delete via dashboard if desired.
+- The schedule, episodes UI and AI features all assume `tmdbCache` payloads
+  written by BOTH `tmdb.details`/`tvSeason` and `schedule.get` stay shape-
+  identical — they share `normalizeDetails`/`normalizeSeasonEpisodes` from
+  `convex/tmdb.ts`; don't fork those normalizers.
+- Something occupies port 3000 locally; `pnpm dev` lands on 3001.
+- User constraint: no global installs; no subagents (account limit) — the
+  improve-skill audit was run inline instead of fanning out.
+
+## Previous status
+
 **Session 3 — Collections + polish: COMPLETE, user-verified, committed.**
 **Session 4 — Collections tab redesign: COMPLETE, user-verified, committed.**
 The user-requested redesign (collection cards grid replacing the tab
@@ -147,4 +216,5 @@ Carried over from Sessions 1–2 (all still true):
 | 2 | 2026-07-26 | Complete. Items backend + overlay + tabs + drawer, user-verified. Added drawer backdrop + action row on user request. Committed. |
 | 3 | 2026-07-27 | Complete. Collections feature + polish, user-verified in browser. Committed. |
 | 4 | 2026-07-27 | Complete. Collections tab redesign (cards grid + mosaic + detail view), user-verified in browser. Committed. |
+| 5 | 2026-10-04 | Complete. Improvements sweep on `improvements` branch (episodes, schedule, AI, discover redesign, audit). Awaiting user verification, then curated merge. |
 

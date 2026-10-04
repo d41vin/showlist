@@ -7,11 +7,22 @@ import type { FunctionReturnType } from "convex/server"
 import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 
+import { DetailsDrawer } from "@/components/details-drawer"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
-import { localTodayISO, tmdbPosterThumbUrl, type MediaItem } from "@/lib/media"
+import {
+  localTodayISO,
+  tmdbPosterThumbUrl,
+  type CollectionSummary,
+  type ItemState,
+  type MediaItem,
+} from "@/lib/media"
+import {
+  useCollectionSummaries,
+  useItemStateMap,
+} from "@/components/use-item-state"
 
 type ScheduleEntry = FunctionReturnType<typeof api.schedule.get>[number]
 
@@ -54,6 +65,10 @@ export function ScheduleTab({
   const scheduleGet = useAction(api.schedule.get)
   const watches = useQuery(api.episodes.listMine, isAuthenticated ? {} : "skip")
   const toggleEpisode = useMutation(api.episodes.toggle)
+  // Real per-title state for the row drawers (subscriptions are deduped with
+  // the other tabs' queries, so this costs nothing).
+  const stateByKey = useItemStateMap(isAuthenticated)
+  const collections = useCollectionSummaries(isAuthenticated)
 
   const [entries, setEntries] = useState<ScheduleEntry[] | null>(null)
   const [failed, setFailed] = useState(false)
@@ -187,12 +202,16 @@ export function ScheduleTab({
         title="Upcoming"
         groups={upcomingGroups}
         onToggle={onToggle}
+        stateByKey={stateByKey}
+        collections={collections}
       />
       {recentGroups.length > 0 && (
         <ScheduleSection
           title="Catch up"
           groups={recentGroups}
           onToggle={onToggle}
+          stateByKey={stateByKey}
+          collections={collections}
         />
       )}
     </div>
@@ -217,10 +236,14 @@ function ScheduleSection({
   title,
   groups,
   onToggle,
+  stateByKey,
+  collections,
 }: {
   title: string
   groups: { label: string; rows: Row[] }[]
   onToggle: (row: Row) => void
+  stateByKey: Map<string, ItemState>
+  collections: CollectionSummary[]
 }) {
   return (
     <section className="flex flex-col gap-3">
@@ -229,7 +252,13 @@ function ScheduleSection({
         <div key={`${title}-${group.label}`} className="flex flex-col gap-1">
           <h3 className="text-sm font-semibold">{group.label}</h3>
           {group.rows.map((row) => (
-            <ScheduleRow key={row.key} row={row} onToggle={onToggle} />
+            <ScheduleRow
+              key={row.key}
+              row={row}
+              onToggle={onToggle}
+              state={stateByKey.get(`${row.item.mediaType}:${row.item.tmdbId}`)}
+              collections={collections}
+            />
           ))}
         </div>
       ))}
@@ -283,9 +312,13 @@ function dayLabel(airDate: string, today: string) {
 function ScheduleRow({
   row,
   onToggle,
+  state,
+  collections,
 }: {
   row: Row
   onToggle: (row: Row) => void
+  state: ItemState | undefined
+  collections: CollectionSummary[]
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg px-1 py-1.5 hover:bg-accent/50">
@@ -317,6 +350,7 @@ function ScheduleRow({
           row.watched ? "unwatched" : "watched"
         }`}
       />
+      <DetailsDrawer item={row.item} state={state} collections={collections} />
     </div>
   )
 }
