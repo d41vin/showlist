@@ -3,6 +3,7 @@ import { v } from "convex/values"
 import { internal } from "./_generated/api"
 import { action } from "./_generated/server"
 import { normalizeDetails, normalizeSeasonEpisodes, tmdbFetch } from "./tmdb"
+import { isRecent, isUpcoming, parseDayMs } from "./schedule_windows"
 
 // Schedule computation. Reads the SAME cache entries the details drawer
 // writes (details:tv:*), with a stricter freshness rule — air dates must be
@@ -12,9 +13,6 @@ import { normalizeDetails, normalizeSeasonEpisodes, tmdbFetch } from "./tmdb"
 
 const DETAILS_TTL_MS = 6 * 60 * 60 * 1000
 const SEASON_TTL_MS = 24 * 60 * 60 * 1000
-// How far ahead to look for airing episodes, and how far back for catch-up.
-const UPCOMING_DAYS = 30
-const RECENT_DAYS = 8
 // Full-season drops (Netflix-style) can put dozens of episodes in the
 // window; the schedule list stays sane with a per-show cap.
 const MAX_UPCOMING_PER_SHOW = 10
@@ -50,8 +48,6 @@ export const get = action({
     if (todayMs === null) {
       throw new Error("Invalid date")
     }
-    const windowStartMs = todayMs - RECENT_DAYS * DAY_MS
-    const windowEndMs = todayMs + (UPCOMING_DAYS + 1) * DAY_MS
 
     // 1. Show summaries — shared cache keys with tmdb.details.
     const keys = ids.map((tmdbId) => `details:tv:${tmdbId}:v2`)
@@ -110,7 +106,7 @@ export const get = action({
       const summary = summaries[i]
       if (!summary || summary.nextEpisode === null) continue
       const airMs = parseDayMs(summary.nextEpisode.airDate)
-      if (airMs !== null && airMs >= todayMs - DAY_MS && airMs < windowEndMs) {
+      if (airMs !== null && isUpcoming(airMs, todayMs)) {
         seasonNeeds.push({
           tmdbId: ids[i],
           season: summary.nextEpisode.season,
@@ -208,7 +204,7 @@ export const get = action({
               ]
         for (const ep of candidates) {
           const airMs = parseDayMs(ep.airDate)
-          if (airMs === null || airMs < todayMs || airMs >= windowEndMs) {
+          if (airMs === null || !isUpcoming(airMs, todayMs)) {
             continue
           }
           upcoming.push({
@@ -235,7 +231,7 @@ export const get = action({
       } | null = null
       if (summary.lastEpisode !== null) {
         const airMs = parseDayMs(summary.lastEpisode.airDate)
-        if (airMs !== null && airMs >= windowStartMs && airMs < todayMs) {
+        if (airMs !== null && isRecent(airMs, todayMs)) {
           lastEpisode = {
             season: summary.lastEpisode.season,
             episode: summary.lastEpisode.episode,
@@ -258,16 +254,6 @@ export const get = action({
     return out
   },
 })
-
-const DAY_MS = 24 * 60 * 60 * 1000
-
-// ISO date string → UTC ms of that calendar day (TMDB air dates are plain
-// dates; all window math happens in this same space).
-function parseDayMs(date: string | null): number | null {
-  if (date === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
-  const ms = Date.parse(`${date}T00:00:00Z`)
-  return Number.isNaN(ms) ? null : ms
-}
 
 function* chunks<T>(items: T[], size: number): Generator<T[]> {
   for (let i = 0; i < items.length; i += size) {

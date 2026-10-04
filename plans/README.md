@@ -2,62 +2,51 @@
 
 Adapted from the shadcn `improve` skill methodology (read-only audit →
 self-contained plans an executor can implement later). The 2026-10-04
-session audited the `improvements` branch after Phases 1–4 and implemented
-the high-leverage items directly; the findings below are the ones
-**deliberately not implemented** — each plan is self-contained so any
-session (or agent) can pick it up without this conversation's context.
+session audited the `improvements` branch after Phases 1–4, implemented
+the high-leverage items directly, then — per the "keep going" mandate —
+also implemented **plans 1 and 2** the same day (tests + cache eviction,
+commit history below). Plans 3–5 remain open.
 
-Verification gate for every plan: `pnpm typecheck && pnpm lint && pnpm build`
-must pass, and `npx convex dev --once` must deploy clean.
+Verification gate for every plan: `pnpm typecheck && pnpm lint &&
+pnpm vitest run && pnpm build` must pass, and `npx convex dev --once`
+must deploy clean.
 
 ## Prioritized findings
 
-| # | Area | Finding | Priority |
-|---|------|---------|----------|
-| 1 | tests | No automated tests for episode tracking, cleanup rule, schedule windows | High |
-| 2 | performance | `tmdbCache` table grows unbounded (no eviction) | Medium |
-| 3 | ux | Schedule silently caps at 200 shows | Medium |
-| 4 | robustness | `episodes.setSeason` bulk insert has no transaction-limit guard | Low |
-| 5 | security | AI key in localStorage is readable by any XSS | Low (inherent to BYOK-in-browser) |
-| 6 | tech-debt | `lib/media.ts` mixes URLs, dates and domain types | Low |
+| # | Area | Finding | Priority | Status |
+|---|------|---------|----------|--------|
+| 1 | tests | No automated tests for episode tracking, cleanup rule, schedule windows | High | **Done 2026-10-04** |
+| 2 | performance | `tmdbCache` table grows unbounded (no eviction) | Medium | **Done 2026-10-04** |
+| 3 | ux | Schedule silently caps at 200 shows | Medium | Open |
+| 4 | robustness | `episodes.setSeason` bulk insert has no transaction-limit guard | Low | Open |
+| 5 | security | AI key in localStorage is readable by any XSS | Low (inherent to BYOK-in-browser) | Open (direction) |
+| 6 | tech-debt | `lib/media.ts` mixes URLs, dates and domain types | Low | Open |
 
-## Plan 1 — Backend tests for episodes, cleanup and schedule windows
+## Plan 1 — Backend tests for episodes, cleanup and schedule windows ✅
 
-**Context.** `convex/episodes.ts` (toggle/setSeason/ensureWatching),
-`convex/helpers.ts` `deleteIfFullyUnset` (episode-progress guard added
-2026-10-04), and `convex/schedule.ts` window math (`parseDayMs`, upcoming
-`[today, +30d]`, recent `[-8d, today)`) have no tests. Regression here
-corrupts user tracking data silently.
+Implemented on 2026-10-04:
+- Dev deps: `convex-test`, `vitest`, `@edge-runtime/vm`; `vitest.config.ts`
+  with `environment: "edge-runtime"`; `convex` npm package bumped
+  1.42.3 → 1.46.0 (convex-test 0.0.60 requires `CommitTsPlaceholder`).
+- `convex/schedule-windows.ts`: window math extracted from schedule.ts
+  into pure functions (`parseDayMs`, `isUpcoming`, `isRecent`) — note the
+  underscore filename (Convex forbids hyphens in module paths).
+- `convex/episodes.test.ts` (5 tests): toggle lazy-create + watching flip,
+  un-tick leaves flags intact, setSeason mark/clear, episode ticks keep the
+  item doc alive through the cleanup path, listMine projected shape.
+- `convex/schedule_windows.test.ts` (8 tests): strict date parsing,
+  window boundaries (day 0/30/31, day -1/-8/-9).
+- convex-test 0.0.60 API note: `withIdentity(identity)` returns a scoped
+  client — no callback form. `import.meta.glob` needs a cast (vite types
+  are transitive-only under pnpm).
 
-**Steps.**
-1. `pnpm add -D convex-test vitest @edge-runtime/vm` (project-local).
-2. `vitest.config.ts` with `environment: "edge-runtime"`.
-3. `convex/episodes.test.ts`: use `convexTest(schema, import.meta.glob("./**/*.ts"))`
-   (add `/// <reference types="vite/client" />` at top ONLY in test files).
-   Cover: toggle inserts + lazy-creates item with `watching: true`; toggle
-   again un-marks; setSeason marks all then clears; marking episodes keeps
-   the item doc alive through `deleteIfFullyUnset` even when all flags off;
-   `listForShow`/`listMine` return projected shapes (no `_id`).
-4. `convex/schedule.test.ts`: extract `parseDayMs` + window constants into
-   `convex/schedule-windows.ts` (pure functions, no action) and test
-   boundary days (today, day 30, day 31, day -8, day -9, invalid strings).
-5. Run `pnpm vitest run`.
+## Plan 2 — tmdbCache eviction cron ✅
 
-**Done when:** all tests green; typecheck/lint/build pass.
-
-## Plan 2 — tmdbCache eviction cron
-
-**Context.** `convex/tmdb_cache.ts` upserts; nothing deletes. Docs are
-small (one normalized payload each) but the table only grows.
-
-**Steps.**
-1. New `convex/crons.ts`: `cronJobs()` interval (e.g. weekly) running an
-   `internalAction` that iterates `tmdbCache` by `_creationTime` and deletes
-   entries older than 30 days in batches (guidelines: read a `.take(n)`
-   batch, `ctx.db.delete` each, schedule continuation if more remain).
-2. Register the cron in the same file; `npx convex dev` to deploy.
-
-**Done when:** cron visible in dashboard; old entries deleted on manual run.
+Implemented on 2026-10-04: `convex/crons.ts` — weekly internalMutation
+deleting `tmdbCache` entries older than 30 days by `_creationTime` in
+500-doc batches, self-rescheduling via `ctx.scheduler.runAfter` when a
+batch fills. Eviction is correctness-neutral (a refreshed-but-old entry
+just refetches on next read).
 
 ## Plan 3 — Surface the schedule 200-show cap
 
