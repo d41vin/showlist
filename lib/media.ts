@@ -28,6 +28,19 @@ export function tmdbStillUrl(stillPath: string) {
   return `https://image.tmdb.org/t/p/w185${stillPath}`
 }
 
+// Tiny poster thumbs (schedule rows, dense lists).
+export function tmdbPosterThumbUrl(posterPath: string) {
+  return `https://image.tmdb.org/t/p/w92${posterPath}`
+}
+
+// The user's local today as an ISO date string — the same form TMDB air
+// dates use, so day grouping and "unaired" checks stay in the user's own
+// calendar day.
+export function localTodayISO() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+}
+
 export type Sentiment = "liked" | "disliked"
 
 // A user collection as list/menu entries need it (from collections.listMine).

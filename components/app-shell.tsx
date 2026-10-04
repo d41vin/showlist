@@ -13,6 +13,7 @@ import Image from "next/image"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { CreateCollectionDialog } from "@/components/create-collection-dialog"
+import { ScheduleTab } from "@/components/schedule-tab"
 import { ShowCard } from "@/components/show-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -241,6 +242,7 @@ export function AppShell() {
               <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
               <TabsTrigger value="watched">Watched</TabsTrigger>
               <TabsTrigger value="watching">Watching</TabsTrigger>
+              <TabsTrigger value="schedule">Schedule</TabsTrigger>
               <TabsTrigger value="collections">Collections</TabsTrigger>
             </TabsList>
             <TabsContent value="watchlist" className="mt-6">
@@ -265,6 +267,12 @@ export function AppShell() {
                 loading={myItems === undefined}
                 emptyMessage="Nothing in progress yet — toggle Watching on any card."
                 {...gridProps}
+              />
+            </TabsContent>
+            <TabsContent value="schedule" className="mt-6">
+              <ScheduleTab
+                isAuthenticated={isAuthenticated}
+                myItems={myItems}
               />
             </TabsContent>
             <TabsContent value="collections" className="mt-6">

@@ -11,7 +11,11 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
-import { tmdbStillUrl, type MediaItem } from "@/lib/media"
+import {
+  localTodayISO,
+  tmdbStillUrl,
+  type MediaItem,
+} from "@/lib/media"
 
 type ShowDetails = FunctionReturnType<typeof api.tmdb.details>
 type SeasonEpisodes = FunctionReturnType<typeof api.tmdb.tvSeason>
@@ -214,7 +218,7 @@ function EpisodeRow({
 }) {
   const aired =
     episode.airDate === null ||
-    episode.airDate <= todayLocalISODate()
+    episode.airDate <= localTodayISO()
   return (
     <label
       className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-1.5 hover:bg-accent/50 ${
@@ -254,13 +258,6 @@ function EpisodeRow({
       </div>
     </label>
   )
-}
-
-// Local-timezone today as an ISO date string — the same form TMDB air dates
-// use, so "unaired" comparisons stay in the user's own calendar day.
-function todayLocalISODate() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
 }
 
 function formatAirDate(airDate: string | null) {

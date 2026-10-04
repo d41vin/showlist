@@ -80,7 +80,12 @@ type SeasonEpisodesPayload = Infer<typeof seasonEpisodesValidator>
 type CacheEntry = { payload: unknown; fetchedAt: number }
 
 // Supports both TMDB v4 read access tokens (JWT) and v3 API keys.
-async function tmdbFetch(path: string, params: Record<string, string>) {
+// Exported for schedule.ts, which re-reads the same cache entries and must
+// normalize identically.
+export async function tmdbFetch(
+  path: string,
+  params: Record<string, string>
+) {
   const key = process.env.TMDB_API_KEY
   if (!key) {
     throw new Error("TMDB_API_KEY is not set on the Convex deployment")
@@ -100,6 +105,106 @@ async function tmdbFetch(path: string, params: Record<string, string>) {
     throw new Error(`TMDB request failed with status ${response.status}`)
   }
   return (await response.json()) as Record<string, unknown>
+}
+
+// Raw TMDB show/season responses → the exact cached payload shapes above.
+// Shared by tmdb.details / tmdb.tvSeason and the schedule action.
+export function normalizeDetails(
+  data: Record<string, unknown>,
+  imagesData: Record<string, unknown>,
+  mediaType: "movie" | "tv"
+): DetailsPayload {
+  const genres = Array.isArray(data.genres)
+    ? data.genres
+        .map((g: Record<string, unknown>) => g.name)
+        .filter((name): name is string => typeof name === "string")
+    : [];
+  const logos = Array.isArray(imagesData.logos) ? imagesData.logos : []
+  const logo =
+    logos.find((l: Record<string, unknown>) => l.iso_639_1 === "en") ??
+    logos[0] ??
+    null
+  const logoPath =
+    logo && typeof (logo as Record<string, unknown>).file_path === "string"
+      ? ((logo as Record<string, unknown>).file_path as string)
+      : null
+
+  // Season list + next/last episode only exist on TV; movies get empty
+  // defaults so one validator covers both.
+  const rawSeasons = Array.isArray(data.seasons) ? data.seasons : []
+  const seasons = rawSeasons.map((s: Record<string, unknown>) => ({
+    season: typeof s.season_number === "number" ? s.season_number : 0,
+    name: typeof s.name === "string" ? s.name : "",
+    episodeCount:
+      typeof s.episode_count === "number" ? s.episode_count : 0,
+    airDate: typeof s.air_date === "string" ? s.air_date : null,
+    posterPath: typeof s.poster_path === "string" ? s.poster_path : null,
+  }))
+
+  return {
+    overview: typeof data.overview === "string" ? data.overview : null,
+    tagline:
+      typeof data.tagline === "string" && data.tagline !== ""
+        ? data.tagline
+        : null,
+    genres,
+    runtime: typeof data.runtime === "number" ? data.runtime : null,
+    numberOfSeasons:
+      typeof data.number_of_seasons === "number"
+        ? data.number_of_seasons
+        : null,
+    numberOfEpisodes:
+      typeof data.number_of_episodes === "number"
+        ? data.number_of_episodes
+        : null,
+    voteAverage:
+      typeof data.vote_average === "number" ? data.vote_average : null,
+    backdropPath:
+      typeof data.backdrop_path === "string" ? data.backdrop_path : null,
+    releaseDate:
+      typeof (mediaType === "movie"
+        ? data.release_date
+        : data.first_air_date) === "string"
+        ? String(
+            mediaType === "movie" ? data.release_date : data.first_air_date
+          )
+        : null,
+    logoPath,
+    status: typeof data.status === "string" ? data.status : null,
+    seasons,
+    nextEpisode: episodeRef(data.next_episode_to_air),
+    lastEpisode: episodeRef(data.last_episode_to_air),
+  }
+}
+
+export function normalizeSeasonEpisodes(
+  data: Record<string, unknown>
+): SeasonEpisodesPayload {
+  const rawEpisodes = Array.isArray(data.episodes) ? data.episodes : []
+  return {
+    name: typeof data.name === "string" ? data.name : null,
+    airDate: typeof data.air_date === "string" ? data.air_date : null,
+    episodes: rawEpisodes.map((e: Record<string, unknown>) => ({
+      episode: typeof e.episode_number === "number" ? e.episode_number : 0,
+      name: typeof e.name === "string" ? e.name : null,
+      overview: typeof e.overview === "string" ? e.overview : null,
+      airDate: typeof e.air_date === "string" ? e.air_date : null,
+      runtime: typeof e.runtime === "number" ? e.runtime : null,
+      stillPath: typeof e.still_path === "string" ? e.still_path : null,
+    })),
+  }
+}
+
+function episodeRef(e: unknown) {
+  if (e === null || typeof e !== "object") return null
+  const ep = e as Record<string, unknown>
+  return {
+    season: typeof ep.season_number === "number" ? ep.season_number : 0,
+    episode: typeof ep.episode_number === "number" ? ep.episode_number : 0,
+    name: typeof ep.name === "string" ? ep.name : null,
+    airDate: typeof ep.air_date === "string" ? ep.air_date : null,
+    stillPath: typeof ep.still_path === "string" ? ep.still_path : null,
+  }
 }
 
 function yearOf(date: unknown): string | null {
@@ -179,85 +284,7 @@ export const details = action({
         include_image_language: "en,null",
       }),
     ])
-    const genres = Array.isArray(data.genres)
-      ? data.genres
-          .map((g: Record<string, unknown>) => g.name)
-          .filter((name): name is string => typeof name === "string")
-      : [];
-    const logos = Array.isArray(imagesData.logos) ? imagesData.logos : []
-    const logo =
-      logos.find((l: Record<string, unknown>) => l.iso_639_1 === "en") ??
-      logos[0] ??
-      null
-    const logoPath =
-      logo && typeof (logo as Record<string, unknown>).file_path === "string"
-        ? ((logo as Record<string, unknown>).file_path as string)
-        : null
-
-    // Season list + next/last episode only exist on TV; movies get empty
-    // defaults so one validator covers both.
-    const rawSeasons = Array.isArray(data.seasons) ? data.seasons : []
-    const seasons = rawSeasons.map((s: Record<string, unknown>) => ({
-      season:
-        typeof s.season_number === "number" ? s.season_number : 0,
-      name: typeof s.name === "string" ? s.name : "",
-      episodeCount:
-        typeof s.episode_count === "number" ? s.episode_count : 0,
-      airDate: typeof s.air_date === "string" ? s.air_date : null,
-      posterPath:
-        typeof s.poster_path === "string" ? s.poster_path : null,
-    }))
-    const episodeRef = (e: unknown) => {
-      if (e === null || typeof e !== "object") return null
-      const ep = e as Record<string, unknown>
-      return {
-        season:
-          typeof ep.season_number === "number" ? ep.season_number : 0,
-        episode:
-          typeof ep.episode_number === "number" ? ep.episode_number : 0,
-        name: typeof ep.name === "string" ? ep.name : null,
-        airDate: typeof ep.air_date === "string" ? ep.air_date : null,
-        stillPath:
-          typeof ep.still_path === "string" ? ep.still_path : null,
-      }
-    }
-
-    const payload = {
-      overview: typeof data.overview === "string" ? data.overview : null,
-      tagline:
-        typeof data.tagline === "string" && data.tagline !== ""
-          ? data.tagline
-          : null,
-      genres,
-      runtime: typeof data.runtime === "number" ? data.runtime : null,
-      numberOfSeasons:
-        typeof data.number_of_seasons === "number"
-          ? data.number_of_seasons
-          : null,
-      numberOfEpisodes:
-        typeof data.number_of_episodes === "number"
-          ? data.number_of_episodes
-          : null,
-      voteAverage:
-        typeof data.vote_average === "number" ? data.vote_average : null,
-      backdropPath:
-        typeof data.backdrop_path === "string" ? data.backdrop_path : null,
-      releaseDate:
-        typeof (args.mediaType === "movie"
-          ? data.release_date
-          : data.first_air_date) === "string"
-          ? String(
-              args.mediaType === "movie"
-                ? data.release_date
-                : data.first_air_date
-            )
-          : null,
-      logoPath,
-      status: typeof data.status === "string" ? data.status : null,
-      seasons,
-      nextEpisode: episodeRef(data.next_episode_to_air),
-      lastEpisode: episodeRef(data.last_episode_to_air),
-    }
+    const payload = normalizeDetails(data, imagesData, args.mediaType)
 
     await ctx.runMutation(internal.tmdb_cache.putBatch, {
       entries: [{ key: cacheKey, payload, fetchedAt: Date.now() }],
@@ -291,20 +318,7 @@ export const tvSeason = action({
     const data = await tmdbFetch(`/tv/${args.tmdbId}/season/${args.season}`, {
       language: "en-US",
     })
-    const rawEpisodes = Array.isArray(data.episodes) ? data.episodes : []
-    const payload = {
-      name: typeof data.name === "string" ? data.name : null,
-      airDate: typeof data.air_date === "string" ? data.air_date : null,
-      episodes: rawEpisodes.map((e: Record<string, unknown>) => ({
-        episode:
-          typeof e.episode_number === "number" ? e.episode_number : 0,
-        name: typeof e.name === "string" ? e.name : null,
-        overview: typeof e.overview === "string" ? e.overview : null,
-        airDate: typeof e.air_date === "string" ? e.air_date : null,
-        runtime: typeof e.runtime === "number" ? e.runtime : null,
-        stillPath: typeof e.still_path === "string" ? e.still_path : null,
-      })),
-    }
+    const payload = normalizeSeasonEpisodes(data)
 
     await ctx.runMutation(internal.tmdb_cache.putBatch, {
       entries: [{ key: cacheKey, payload, fetchedAt: Date.now() }],
