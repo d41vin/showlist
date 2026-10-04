@@ -1,6 +1,9 @@
-import { v } from "convex/values"
+import { v, type Infer } from "convex/values"
 
+import { internal } from "./_generated/api"
 import { action } from "./_generated/server"
+
+import { getBatch, putBatch } from "./tmdb_cache"
 
 const TMDB_BASE = "https://api.themoviedb.org/3"
 
@@ -14,6 +17,68 @@ export const searchResultValidator = v.object({
   posterPath: v.union(v.string(), v.null()),
   year: v.union(v.string(), v.null()),
 })
+
+// Normalized TMDB shapes below are also the tmdbCache payloads — the cached
+// object IS the function return value.
+
+export const episodeRefValidator = v.object({
+  season: v.number(),
+  episode: v.number(),
+  name: v.union(v.string(), v.null()),
+  airDate: v.union(v.string(), v.null()),
+  stillPath: v.union(v.string(), v.null()),
+})
+
+export const seasonSummaryValidator = v.object({
+  season: v.number(),
+  name: v.string(),
+  episodeCount: v.number(),
+  airDate: v.union(v.string(), v.null()),
+  posterPath: v.union(v.string(), v.null()),
+})
+
+export const seasonEpisodesValidator = v.object({
+  name: v.union(v.string(), v.null()),
+  airDate: v.union(v.string(), v.null()),
+  episodes: v.array(
+    v.object({
+      episode: v.number(),
+      name: v.union(v.string(), v.null()),
+      overview: v.union(v.string(), v.null()),
+      airDate: v.union(v.string(), v.null()),
+      runtime: v.union(v.number(), v.null()),
+      stillPath: v.union(v.string(), v.null()),
+    })
+  ),
+})
+
+// Cached details stay useful for hours; TMDB metadata changes rarely and the
+// schedule re-reads the same entries with its own freshness rule.
+const DETAILS_TTL_MS = 12 * 60 * 60 * 1000
+const SEASON_TTL_MS = 24 * 60 * 60 * 1000
+
+const detailsValidator = v.object({
+  overview: v.union(v.string(), v.null()),
+  tagline: v.union(v.string(), v.null()),
+  genres: v.array(v.string()),
+  runtime: v.union(v.number(), v.null()),
+  numberOfSeasons: v.union(v.number(), v.null()),
+  numberOfEpisodes: v.union(v.number(), v.null()),
+  voteAverage: v.union(v.number(), v.null()),
+  releaseDate: v.union(v.string(), v.null()),
+  backdropPath: v.union(v.string(), v.null()),
+  logoPath: v.union(v.string(), v.null()),
+  status: v.union(v.string(), v.null()),
+  seasons: v.array(seasonSummaryValidator),
+  nextEpisode: v.union(episodeRefValidator, v.null()),
+  lastEpisode: v.union(episodeRefValidator, v.null()),
+})
+
+type DetailsPayload = Infer<typeof detailsValidator>
+type SeasonEpisodesPayload = Infer<typeof seasonEpisodesValidator>
+// Shape of one entry from tmdb_cache.getBatch; the annotation breaks the
+// TS circularity that runQuery results would otherwise create here.
+type CacheEntry = { payload: unknown; fetchedAt: number }
 
 // Supports both TMDB v4 read access tokens (JWT) and v3 API keys.
 async function tmdbFetch(path: string, params: Record<string, string>) {
@@ -90,23 +155,25 @@ export const search = action({
 
 export const details = action({
   args: { mediaType: mediaTypeValidator, tmdbId: v.number() },
-  returns: v.object({
-    overview: v.union(v.string(), v.null()),
-    tagline: v.union(v.string(), v.null()),
-    genres: v.array(v.string()),
-    runtime: v.union(v.number(), v.null()),
-    numberOfSeasons: v.union(v.number(), v.null()),
-    numberOfEpisodes: v.union(v.number(), v.null()),
-    voteAverage: v.union(v.number(), v.null()),
-    releaseDate: v.union(v.string(), v.null()),
-    backdropPath: v.union(v.string(), v.null()),
-    logoPath: v.union(v.string(), v.null()),
-  }),
+  returns: detailsValidator,
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) {
       throw new Error("Not signed in")
     }
+    const cacheKey = `details:${args.mediaType}:${args.tmdbId}:v2`
+    const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
+      keys: [cacheKey],
+    })) as CacheEntry[]
+    const cachedPayload = cached?.payload as DetailsPayload | null
+    if (
+      cachedPayload !== null &&
+      cached.payload !== null &&
+      Date.now() - cached.fetchedAt < DETAILS_TTL_MS
+    ) {
+      return cachedPayload
+    }
+
     const [data, imagesData] = await Promise.all([
       tmdbFetch(`/${args.mediaType}/${args.tmdbId}`, { language: "en-US" }),
       tmdbFetch(`/${args.mediaType}/${args.tmdbId}/images`, {
@@ -127,7 +194,36 @@ export const details = action({
       logo && typeof (logo as Record<string, unknown>).file_path === "string"
         ? ((logo as Record<string, unknown>).file_path as string)
         : null
-    return {
+
+    // Season list + next/last episode only exist on TV; movies get empty
+    // defaults so one validator covers both.
+    const rawSeasons = Array.isArray(data.seasons) ? data.seasons : []
+    const seasons = rawSeasons.map((s: Record<string, unknown>) => ({
+      season:
+        typeof s.season_number === "number" ? s.season_number : 0,
+      name: typeof s.name === "string" ? s.name : "",
+      episodeCount:
+        typeof s.episode_count === "number" ? s.episode_count : 0,
+      airDate: typeof s.air_date === "string" ? s.air_date : null,
+      posterPath:
+        typeof s.poster_path === "string" ? s.poster_path : null,
+    }))
+    const episodeRef = (e: unknown) => {
+      if (e === null || typeof e !== "object") return null
+      const ep = e as Record<string, unknown>
+      return {
+        season:
+          typeof ep.season_number === "number" ? ep.season_number : 0,
+        episode:
+          typeof ep.episode_number === "number" ? ep.episode_number : 0,
+        name: typeof ep.name === "string" ? ep.name : null,
+        airDate: typeof ep.air_date === "string" ? ep.air_date : null,
+        stillPath:
+          typeof ep.still_path === "string" ? ep.still_path : null,
+      }
+    }
+
+    const payload = {
       overview: typeof data.overview === "string" ? data.overview : null,
       tagline:
         typeof data.tagline === "string" && data.tagline !== ""
@@ -158,7 +254,63 @@ export const details = action({
             )
           : null,
       logoPath,
+      status: typeof data.status === "string" ? data.status : null,
+      seasons,
+      nextEpisode: episodeRef(data.next_episode_to_air),
+      lastEpisode: episodeRef(data.last_episode_to_air),
     }
+
+    await ctx.runMutation(internal.tmdb_cache.putBatch, {
+      entries: [{ key: cacheKey, payload, fetchedAt: Date.now() }],
+    })
+    return payload
+  },
+})
+
+// One season's episode list for the details drawer's Episodes section.
+export const tvSeason = action({
+  args: { tmdbId: v.number(), season: v.number() },
+  returns: seasonEpisodesValidator,
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const cacheKey = `tv:${args.tmdbId}:season:${args.season}:v1`
+    const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
+      keys: [cacheKey],
+    })) as CacheEntry[]
+    const cachedPayload = cached?.payload as SeasonEpisodesPayload | null
+    if (
+      cachedPayload !== null &&
+      cached.payload !== null &&
+      Date.now() - cached.fetchedAt < SEASON_TTL_MS
+    ) {
+      return cachedPayload
+    }
+
+    const data = await tmdbFetch(`/tv/${args.tmdbId}/season/${args.season}`, {
+      language: "en-US",
+    })
+    const rawEpisodes = Array.isArray(data.episodes) ? data.episodes : []
+    const payload = {
+      name: typeof data.name === "string" ? data.name : null,
+      airDate: typeof data.air_date === "string" ? data.air_date : null,
+      episodes: rawEpisodes.map((e: Record<string, unknown>) => ({
+        episode:
+          typeof e.episode_number === "number" ? e.episode_number : 0,
+        name: typeof e.name === "string" ? e.name : null,
+        overview: typeof e.overview === "string" ? e.overview : null,
+        airDate: typeof e.air_date === "string" ? e.air_date : null,
+        runtime: typeof e.runtime === "number" ? e.runtime : null,
+        stillPath: typeof e.still_path === "string" ? e.still_path : null,
+      })),
+    }
+
+    await ctx.runMutation(internal.tmdb_cache.putBatch, {
+      entries: [{ key: cacheKey, payload, fetchedAt: Date.now() }],
+    })
+    return payload
   },
 })
 

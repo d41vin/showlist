@@ -9,9 +9,11 @@
  */
 
 import type * as collections from "../collections.js";
+import type * as episodes from "../episodes.js";
 import type * as helpers from "../helpers.js";
 import type * as items from "../items.js";
 import type * as tmdb from "../tmdb.js";
+import type * as tmdb_cache from "../tmdb_cache.js";
 
 import type {
   ApiFromModules,
@@ -21,9 +23,11 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   collections: typeof collections;
+  episodes: typeof episodes;
   helpers: typeof helpers;
   items: typeof items;
   tmdb: typeof tmdb;
+  tmdb_cache: typeof tmdb_cache;
 }>;
 
 /**

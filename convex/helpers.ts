@@ -38,8 +38,8 @@ export async function findItem(
     .unique()
 }
 
-// Cleanup rule: an item doc with no flags, no sentiment and no collection
-// membership has no reason to exist — delete it.
+// Cleanup rule: an item doc with no flags, no sentiment, no episode progress
+// and no collection membership has no reason to exist — delete it.
 export async function deleteIfFullyUnset(ctx: MutationCtx, doc: Doc<"items">) {
   if (
     doc.inWatchlist ||
@@ -47,6 +47,17 @@ export async function deleteIfFullyUnset(ctx: MutationCtx, doc: Doc<"items">) {
     doc.watching === true ||
     doc.sentiment !== undefined
   ) {
+    return
+  }
+  // Episode ticks keep the item alive on their own: they reference the show
+  // by TMDB id, and deleting the doc would drop the show from the schedule.
+  const episodeWatch = await ctx.db
+    .query("episodeWatches")
+    .withIndex("by_user_and_tmdbId", (q) =>
+      q.eq("userId", doc.userId).eq("tmdbId", doc.tmdbId)
+    )
+    .first()
+  if (episodeWatch !== null) {
     return
   }
   const membership = await ctx.db

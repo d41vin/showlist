@@ -43,4 +43,25 @@ export default defineSchema({
     .index("by_collection", ["collectionId"])
     .index("by_item", ["itemId"])
     .index("by_collection_and_item", ["collectionId", "itemId"]),
+
+  // One tick per (user, show, episode). References the show by TMDB id (not
+  // the item doc) so ticks survive item re-creation and the rewatch flow.
+  episodeWatches: defineTable({
+    userId: v.string(),
+    tmdbId: v.number(),
+    season: v.number(),
+    episode: v.number(),
+    watchedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_tmdbId", ["userId", "tmdbId"])
+    .index("by_user_and_tmdbId_and_season", ["userId", "tmdbId", "season"]),
+
+  // Cached TMDB responses, written only from actions (via internal helpers).
+  // payload shape is per cacheKey; fetchedAt drives the TTL check on read.
+  tmdbCache: defineTable({
+    key: v.string(),
+    payload: v.any(),
+    fetchedAt: v.number(),
+  }).index("by_key", ["key"]),
 })
