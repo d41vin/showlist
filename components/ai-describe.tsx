@@ -10,13 +10,13 @@ import type { CardGridState } from "@/components/use-item-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  aiRecommendJson,
-  DESCRIBE_SYSTEM_PROMPT,
-  useAiConfig,
-} from "@/lib/ai"
+import { aiRecommendJson, DESCRIBE_SYSTEM_PROMPT, useAiConfig } from "@/lib/ai"
 
-type Row = { key: string; recReason?: string; item: Parameters<typeof ShowCard>[0]["item"] }
+type Row = {
+  key: string
+  recReason?: string
+  item: Parameters<typeof ShowCard>[0]["item"]
+}
 
 // Describe mode: the user types what they feel like watching, the AI (in
 // their browser) suggests titles, each resolved to a real card from TMDB.
@@ -44,11 +44,7 @@ export function AiDescribe({
     setLoading(true)
     setError(null)
     try {
-      const recs = await aiRecommendJson(
-        DESCRIBE_SYSTEM_PROMPT,
-        text,
-        config
-      )
+      const recs = await aiRecommendJson(DESCRIBE_SYSTEM_PROMPT, text, config)
       const resolved = await resolve(recs)
       setRows(
         resolved.map(({ rec, item }) => ({
@@ -144,8 +140,8 @@ export function AiDescribe({
       )}
       {!loading && !ranOnce && (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          Describe a vibe, a mood, or a mashup — the AI suggests real titles
-          you can add straight to your lists.
+          Describe a vibe, a mood, or a mashup — the AI suggests real titles you
+          can add straight to your lists.
         </p>
       )}
     </div>

@@ -9,9 +9,7 @@ import { internalMutation, internalQuery } from "./_generated/server"
 
 export const getBatch = internalQuery({
   args: { keys: v.array(v.string()) },
-  returns: v.array(
-    v.object({ payload: v.any(), fetchedAt: v.number() })
-  ),
+  returns: v.array(v.object({ payload: v.any(), fetchedAt: v.number() })),
   handler: async (ctx, args) => {
     const out: { payload: unknown; fetchedAt: number }[] = []
     for (const key of args.keys) {
@@ -19,7 +17,11 @@ export const getBatch = internalQuery({
         .query("tmdbCache")
         .withIndex("by_key", (q) => q.eq("key", key))
         .unique()
-      out.push(doc === null ? { payload: null, fetchedAt: 0 } : { payload: doc.payload, fetchedAt: doc.fetchedAt })
+      out.push(
+        doc === null
+          ? { payload: null, fetchedAt: 0 }
+          : { payload: doc.payload, fetchedAt: doc.fetchedAt }
+      )
     }
     return out
   },

@@ -3,7 +3,6 @@ import { v, type Infer } from "convex/values"
 import { internal } from "./_generated/api"
 import { action } from "./_generated/server"
 
-
 const TMDB_BASE = "https://api.themoviedb.org/3"
 
 const mediaTypeValidator = v.union(v.literal("movie"), v.literal("tv"))
@@ -82,10 +81,7 @@ type CacheEntry = { payload: unknown; fetchedAt: number }
 // Supports both TMDB v4 read access tokens (JWT) and v3 API keys.
 // Exported for schedule.ts, which re-reads the same cache entries and must
 // normalize identically.
-export async function tmdbFetch(
-  path: string,
-  params: Record<string, string>
-) {
+export async function tmdbFetch(path: string, params: Record<string, string>) {
   const key = process.env.TMDB_API_KEY
   if (!key) {
     throw new Error("TMDB_API_KEY is not set on the Convex deployment")
@@ -118,7 +114,7 @@ export function normalizeDetails(
     ? data.genres
         .map((g: Record<string, unknown>) => g.name)
         .filter((name): name is string => typeof name === "string")
-    : [];
+    : []
   const logos = Array.isArray(imagesData.logos) ? imagesData.logos : []
   const logo =
     logos.find((l: Record<string, unknown>) => l.iso_639_1 === "en") ??
@@ -135,8 +131,7 @@ export function normalizeDetails(
   const seasons = rawSeasons.map((s: Record<string, unknown>) => ({
     season: typeof s.season_number === "number" ? s.season_number : 0,
     name: typeof s.name === "string" ? s.name : "",
-    episodeCount:
-      typeof s.episode_count === "number" ? s.episode_count : 0,
+    episodeCount: typeof s.episode_count === "number" ? s.episode_count : 0,
     airDate: typeof s.air_date === "string" ? s.air_date : null,
     posterPath: typeof s.poster_path === "string" ? s.poster_path : null,
   }))
@@ -339,7 +334,7 @@ export const tvSeason = action({
  */
 function normalizeResults(
   results: Record<string, unknown>[],
-  inferredType?: "movie" | "tv",
+  inferredType?: "movie" | "tv"
 ) {
   return results
     .filter(
@@ -347,29 +342,24 @@ function normalizeResults(
         (inferredType !== undefined
           ? r.media_type === undefined || r.media_type === inferredType
           : r.media_type === "movie" || r.media_type === "tv") &&
-        r.adult !== true,
+        r.adult !== true
     )
     .map((r) => {
-      const mediaType = (r.media_type as "movie" | "tv" | undefined) ?? inferredType!
+      const mediaType =
+        (r.media_type as "movie" | "tv" | undefined) ?? inferredType!
       return {
         tmdbId: r.id as number,
         mediaType,
         title: String(mediaType === "movie" ? r.title : r.name),
         posterPath: typeof r.poster_path === "string" ? r.poster_path : null,
-        year: yearOf(
-          mediaType === "movie" ? r.release_date : r.first_air_date,
-        ),
+        year: yearOf(mediaType === "movie" ? r.release_date : r.first_air_date),
       }
     })
 }
 
 export const discoverTrending = action({
   args: {
-    mediaType: v.union(
-      v.literal("all"),
-      v.literal("movie"),
-      v.literal("tv"),
-    ),
+    mediaType: v.union(v.literal("all"), v.literal("movie"), v.literal("tv")),
   },
   returns: v.array(searchResultValidator),
   handler: async (ctx, args) => {

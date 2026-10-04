@@ -97,8 +97,7 @@ export function saveAiConfig(config: AiConfig | null) {
 // useAiConfig — reactive localStorage-backed config via useSyncExternalStore:
 // hydration-safe (server sees null), and consumers re-render when the
 // settings dialog saves or another tab changes the key.
-let snapshotCache: { raw: string | null; config: AiConfig | null } | null =
-  null
+let snapshotCache: { raw: string | null; config: AiConfig | null } | null = null
 
 function subscribe(onChange: () => void) {
   window.addEventListener(AI_CONFIG_EVENT, onChange)

@@ -1,9 +1,6 @@
 "use client"
 
-import {
-  ImageNotFound01Icon,
-  RefreshIcon,
-} from "@hugeicons/core-free-icons"
+import { ImageNotFound01Icon, RefreshIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction, useMutation, useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
@@ -14,11 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
-import {
-  localTodayISO,
-  tmdbPosterThumbUrl,
-  type MediaItem,
-} from "@/lib/media"
+import { localTodayISO, tmdbPosterThumbUrl, type MediaItem } from "@/lib/media"
 
 type ScheduleEntry = FunctionReturnType<typeof api.schedule.get>[number]
 
@@ -59,10 +52,7 @@ export function ScheduleTab({
   )
 
   const scheduleGet = useAction(api.schedule.get)
-  const watches = useQuery(
-    api.episodes.listMine,
-    isAuthenticated ? {} : "skip"
-  )
+  const watches = useQuery(api.episodes.listMine, isAuthenticated ? {} : "skip")
   const toggleEpisode = useMutation(api.episodes.toggle)
 
   const [entries, setEntries] = useState<ScheduleEntry[] | null>(null)
@@ -70,8 +60,7 @@ export function ScheduleTab({
   const [retryNonce, setRetryNonce] = useState(0)
 
   useEffect(() => {
-    const tmdbIds =
-      tmdbIdsKey === "" ? [] : tmdbIdsKey.split(",").map(Number)
+    const tmdbIds = tmdbIdsKey === "" ? [] : tmdbIdsKey.split(",").map(Number)
     if (!isAuthenticated || tmdbIds.length === 0) {
       return
     }
@@ -153,8 +142,7 @@ export function ScheduleTab({
   }, [entries, itemsByTmdbId, watchedKeys])
 
   const loading =
-    myItems === undefined ||
-    (tvItems.length > 0 && entries === null && !failed)
+    myItems === undefined || (tvItems.length > 0 && entries === null && !failed)
 
   if (myItems !== undefined && tvItems.length === 0) {
     return (
@@ -195,9 +183,17 @@ export function ScheduleTab({
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-8">
-      <ScheduleSection title="Upcoming" groups={upcomingGroups} onToggle={onToggle} />
+      <ScheduleSection
+        title="Upcoming"
+        groups={upcomingGroups}
+        onToggle={onToggle}
+      />
       {recentGroups.length > 0 && (
-        <ScheduleSection title="Catch up" groups={recentGroups} onToggle={onToggle} />
+        <ScheduleSection
+          title="Catch up"
+          groups={recentGroups}
+          onToggle={onToggle}
+        />
       )}
     </div>
   )

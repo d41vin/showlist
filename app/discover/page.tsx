@@ -1,15 +1,19 @@
 "use client"
 
-import {
-  Search01Icon,
-} from "@hugeicons/core-free-icons"
+import { Search01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
 import { useAction, useConvexAuth } from "convex/react"
 import { useEffect, useRef, useState } from "react"
 
 import { AiForYou } from "@/components/ai-for-you"
-import { DiscoverCard } from "@/components/discover-card"
+import { DiscoverHero } from "@/components/discover-hero"
+import { ShowCard } from "@/components/show-card"
+import {
+  useCollectionSummaries,
+  useItemStateMap,
+  type CardGridState,
+} from "@/components/use-item-state"
 import { Input } from "@/components/ui/input"
 import { MediaRow } from "@/components/media-row"
 import {
@@ -67,6 +71,30 @@ function DiscoverContent() {
   const discoverTopRated = useAction(api.tmdb.discoverTopRated)
   const discoverNowPlaying = useAction(api.tmdb.discoverNowPlaying)
   const search = useAction(api.tmdb.search)
+
+  // Card state so discovery results carry the full action overlay.
+  const stateByKey = useItemStateMap(isAuthenticated)
+  const collections = useCollectionSummaries(isAuthenticated)
+  const [activeCardKey, setActiveCardKey] = useState<string | null>(null)
+  const gridState: CardGridState = {
+    stateByKey,
+    collections,
+    activeCardKey,
+    onActiveCardKeyChange: setActiveCardKey,
+  }
+
+  const renderCard = (item: MediaItem) => {
+    const key = `${item.mediaType}:${item.tmdbId}`
+    return (
+      <ShowCard
+        item={item}
+        state={stateByKey.get(key)}
+        collections={collections}
+        overlayOpen={activeCardKey === key}
+        onOverlayOpenChange={(open) => setActiveCardKey(open ? key : null)}
+      />
+    )
+  }
 
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<Category>("trending")
@@ -155,7 +183,8 @@ function DiscoverContent() {
           } else {
             const items = await discoverTopRated({ mediaType })
             newRows.push({
-              title: mediaType === "movie" ? "Top Rated Movies" : "Top Rated TV",
+              title:
+                mediaType === "movie" ? "Top Rated Movies" : "Top Rated TV",
               items,
             })
           }
@@ -201,6 +230,15 @@ function DiscoverContent() {
   const GRID_CLASS =
     "grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 
+  const heroItem =
+    !searchActive &&
+    !loading &&
+    !error &&
+    category === "trending" &&
+    rows[0]?.items[0] !== undefined
+      ? rows[0].items[0]
+      : null
+
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
       {/* Search bar */}
@@ -240,10 +278,9 @@ function DiscoverContent() {
             ) : searchResults !== null && searchResults.length > 0 ? (
               <div className={GRID_CLASS}>
                 {searchResults.map((item) => (
-                  <DiscoverCard
-                    key={`${item.mediaType}:${item.tmdbId}`}
-                    item={item}
-                  />
+                  <div key={`${item.mediaType}:${item.tmdbId}`}>
+                    {renderCard(item)}
+                  </div>
                 ))}
               </div>
             ) : searchResults !== null ? (
@@ -258,6 +295,12 @@ function DiscoverContent() {
             value={category}
             onValueChange={(value) => setCategory(value as Category)}
           >
+            {heroItem !== null && (
+              <div className="mb-8">
+                <DiscoverHero item={heroItem} gridState={gridState} />
+              </div>
+            )}
+
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
               <TabsList>
                 <TabsTrigger value="trending">Trending</TabsTrigger>
@@ -269,7 +312,7 @@ function DiscoverContent() {
             </div>
 
             <div className="mt-6 flex flex-col gap-6">
-              {isAuthenticated && !searchActive && (
+              {isAuthenticated && !error && !loading && (
                 <AiForYou isAuthenticated={isAuthenticated} />
               )}
               {error ? (
@@ -282,15 +325,17 @@ function DiscoverContent() {
                 rows.map((row) => (
                   <MediaRow
                     key={row.title}
-                    title={row.title}
+                    title={
+                      category === "trending" ? "Top 10 this week" : row.title
+                    }
                     items={row.items}
                     loading={loading}
-                    renderCard={(item) => <DiscoverCard item={item} />}
+                    renderCard={renderCard}
+                    ranked={category === "trending"}
                   />
                 ))
               )}
             </div>
-
           </Tabs>
         )}
       </div>

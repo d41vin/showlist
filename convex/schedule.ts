@@ -110,11 +110,7 @@ export const get = action({
       const summary = summaries[i]
       if (!summary || summary.nextEpisode === null) continue
       const airMs = parseDayMs(summary.nextEpisode.airDate)
-      if (
-        airMs !== null &&
-        airMs >= todayMs - DAY_MS &&
-        airMs < windowEndMs
-      ) {
+      if (airMs !== null && airMs >= todayMs - DAY_MS && airMs < windowEndMs) {
         seasonNeeds.push({
           tmdbId: ids[i],
           season: summary.nextEpisode.season,
@@ -146,10 +142,9 @@ export const get = action({
       const results = await Promise.all(
         chunk.map(async ({ tmdbId, season }) => {
           try {
-            const data = await tmdbFetch(
-              `/tv/${tmdbId}/season/${season}`,
-              { language: "en-US" }
-            )
+            const data = await tmdbFetch(`/tv/${tmdbId}/season/${season}`, {
+              language: "en-US",
+            })
             return { tmdbId, season, data }
           } catch {
             return { tmdbId, season, data: null }
@@ -195,8 +190,7 @@ export const get = action({
       if (summary.nextEpisode !== null) {
         const next = summary.nextEpisode
         const needIndex = seasonNeeds.findIndex(
-          (need) =>
-            need.tmdbId === ids[i] && need.season === next.season
+          (need) => need.tmdbId === ids[i] && need.season === next.season
         )
         const seasonData = needIndex !== -1 ? seasonEpisodes[needIndex] : null
         const candidates =

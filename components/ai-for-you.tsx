@@ -14,11 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
-import {
-  aiRecommendJson,
-  FOR_YOU_SYSTEM_PROMPT,
-  useAiConfig,
-} from "@/lib/ai"
+import { aiRecommendJson, FOR_YOU_SYSTEM_PROMPT, useAiConfig } from "@/lib/ai"
 import { mediaKey, type MediaItem } from "@/lib/media"
 
 type Row = { key: string; reason?: string; item: MediaItem }
@@ -54,15 +50,16 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
   )
 
   useEffect(() => {
-    if (config === null || myItems === undefined || rows !== null || error !== null) {
+    if (
+      config === null ||
+      myItems === undefined ||
+      rows !== null ||
+      error !== null
+    ) {
       return
     }
     let cancelled = false
-    aiRecommendJson(
-      FOR_YOU_SYSTEM_PROMPT,
-      buildLibraryPrompt(myItems),
-      config
-    )
+    aiRecommendJson(FOR_YOU_SYSTEM_PROMPT, buildLibraryPrompt(myItems), config)
       .then((recs) => resolve(recs, excludeKeys))
       .then((resolved) => {
         if (!cancelled) {
@@ -88,7 +85,10 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
   if (config === null) {
     return (
       <section className="flex items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-6 text-center">
-        <HugeiconsIcon icon={AiMagicIcon} className="size-4 text-muted-foreground" />
+        <HugeiconsIcon
+          icon={AiMagicIcon}
+          className="size-4 text-muted-foreground"
+        />
         <p className="text-sm text-muted-foreground">
           Add your AI key in settings (top right) to get personalized picks.
         </p>
@@ -122,7 +122,10 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
       {loading ? (
         <div className="hide-scrollbar flex gap-4 overflow-x-auto pb-2">
           {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="flex w-36 shrink-0 flex-col gap-1.5 sm:w-44">
+            <div
+              key={i}
+              className="flex w-36 shrink-0 flex-col gap-1.5 sm:w-44"
+            >
               <Skeleton className="aspect-2/3 w-full rounded-lg" />
               <Skeleton className="h-4 w-3/4" />
             </div>

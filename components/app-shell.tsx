@@ -192,7 +192,7 @@ export function AppShell() {
             <Input
               type="search"
               placeholder="Search movies and shows..."
-              className="pl-9 pr-11"
+              className="pr-11 pl-9"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value)
@@ -234,79 +234,79 @@ export function AppShell() {
                   setSelectedCollectionId(null)
                 }}
               >
-            <TabsList className="mx-auto">
-              <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
-              <TabsTrigger value="watched">Watched</TabsTrigger>
-              <TabsTrigger value="watching">Watching</TabsTrigger>
-              <TabsTrigger value="schedule">Schedule</TabsTrigger>
-              <TabsTrigger value="collections">Collections</TabsTrigger>
-            </TabsList>
-            <TabsContent value="watchlist" className="mt-6">
-              <CardGrid
-                items={watchlistItems}
-                loading={myItems === undefined}
-                emptyMessage="Nothing on your watchlist yet — search for something you want to watch."
-                {...gridProps}
-              />
-            </TabsContent>
-            <TabsContent value="watched" className="mt-6">
-              <CardGrid
-                items={watchedItems}
-                loading={myItems === undefined}
-                emptyMessage="Nothing marked as watched yet — toggle Watched on any card."
-                {...gridProps}
-              />
-            </TabsContent>
-            <TabsContent value="watching" className="mt-6">
-              <CardGrid
-                items={watchingItems}
-                loading={myItems === undefined}
-                emptyMessage="Nothing in progress yet — toggle Watching on any card."
-                {...gridProps}
-              />
-            </TabsContent>
-            <TabsContent value="schedule" className="mt-6">
-              <ScheduleTab
-                isAuthenticated={isAuthenticated}
-                myItems={myItems}
-              />
-            </TabsContent>
-            <TabsContent value="collections" className="mt-6">
-              {selectedCollection === null ? (
-                <CollectionCards
-                  collections={collections}
-                  loading={myCollections === undefined}
-                  onOpen={setSelectedCollectionId}
-                  onCreate={() => setCreateOpen(true)}
-                />
-              ) : (
-                <>
-                  <div className="mb-4 flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="-ml-2 shrink-0"
-                      onClick={() => setSelectedCollectionId(null)}
-                    >
-                      <HugeiconsIcon icon={ArrowLeft01Icon} />
-                      Back
-                    </Button>
-                    <h2 className="min-w-0 truncate text-sm font-medium">
-                      {selectedCollection.name}
-                    </h2>
-                    <span className="shrink-0 text-sm text-muted-foreground">
-                      {formatItemCount(selectedCollection.itemCount)}
-                    </span>
-                  </div>
-                  <CollectionGrid
-                    collectionId={selectedCollection._id}
+                <TabsList className="mx-auto">
+                  <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
+                  <TabsTrigger value="watched">Watched</TabsTrigger>
+                  <TabsTrigger value="watching">Watching</TabsTrigger>
+                  <TabsTrigger value="schedule">Schedule</TabsTrigger>
+                  <TabsTrigger value="collections">Collections</TabsTrigger>
+                </TabsList>
+                <TabsContent value="watchlist" className="mt-6">
+                  <CardGrid
+                    items={watchlistItems}
+                    loading={myItems === undefined}
+                    emptyMessage="Nothing on your watchlist yet — search for something you want to watch."
                     {...gridProps}
                   />
-                </>
-              )}
-            </TabsContent>
-          </Tabs>
-        )}
+                </TabsContent>
+                <TabsContent value="watched" className="mt-6">
+                  <CardGrid
+                    items={watchedItems}
+                    loading={myItems === undefined}
+                    emptyMessage="Nothing marked as watched yet — toggle Watched on any card."
+                    {...gridProps}
+                  />
+                </TabsContent>
+                <TabsContent value="watching" className="mt-6">
+                  <CardGrid
+                    items={watchingItems}
+                    loading={myItems === undefined}
+                    emptyMessage="Nothing in progress yet — toggle Watching on any card."
+                    {...gridProps}
+                  />
+                </TabsContent>
+                <TabsContent value="schedule" className="mt-6">
+                  <ScheduleTab
+                    isAuthenticated={isAuthenticated}
+                    myItems={myItems}
+                  />
+                </TabsContent>
+                <TabsContent value="collections" className="mt-6">
+                  {selectedCollection === null ? (
+                    <CollectionCards
+                      collections={collections}
+                      loading={myCollections === undefined}
+                      onOpen={setSelectedCollectionId}
+                      onCreate={() => setCreateOpen(true)}
+                    />
+                  ) : (
+                    <>
+                      <div className="mb-4 flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="-ml-2 shrink-0"
+                          onClick={() => setSelectedCollectionId(null)}
+                        >
+                          <HugeiconsIcon icon={ArrowLeft01Icon} />
+                          Back
+                        </Button>
+                        <h2 className="min-w-0 truncate text-sm font-medium">
+                          {selectedCollection.name}
+                        </h2>
+                        <span className="shrink-0 text-sm text-muted-foreground">
+                          {formatItemCount(selectedCollection.itemCount)}
+                        </span>
+                      </div>
+                      <CollectionGrid
+                        collectionId={selectedCollection._id}
+                        {...gridProps}
+                      />
+                    </>
+                  )}
+                </TabsContent>
+              </Tabs>
+            )}
           </div>
         </>
       )}

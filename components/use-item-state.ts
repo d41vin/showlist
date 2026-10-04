@@ -5,11 +5,7 @@ import { useMemo } from "react"
 
 import { api } from "@/convex/_generated/api"
 import { type Id } from "@/convex/_generated/dataModel"
-import {
-  mediaKey,
-  type CollectionSummary,
-  type ItemState,
-} from "@/lib/media"
+import { mediaKey, type CollectionSummary, type ItemState } from "@/lib/media"
 
 // Everything a card grid needs to render per-title state: the user's items
 // mapped by media key, plus their collections. Shared by the home tab grids,

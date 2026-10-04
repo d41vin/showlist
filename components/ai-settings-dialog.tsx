@@ -41,9 +41,7 @@ export function AiSettingsDialog({
 }) {
   const [provider, setProvider] = useState<AiProvider>("openai")
   const [apiKey, setApiKey] = useState("")
-  const [model, setModel] = useState(
-    AI_PROVIDER_PRESETS.openai.defaultModel
-  )
+  const [model, setModel] = useState(AI_PROVIDER_PRESETS.openai.defaultModel)
   const [baseUrl, setBaseUrl] = useState("")
   const [hasExisting, setHasExisting] = useState(false)
 
@@ -75,8 +73,7 @@ export function AiSettingsDialog({
       provider,
       apiKey: key,
       model: model.trim() !== "" ? model.trim() : preset.defaultModel,
-      baseUrl:
-        provider === "custom" ? baseUrl.trim().replace(/\/$/, "") : "",
+      baseUrl: provider === "custom" ? baseUrl.trim().replace(/\/$/, "") : "",
     })
     onOpenChange(false)
   }
