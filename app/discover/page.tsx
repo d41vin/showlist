@@ -5,9 +5,10 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
-import { useAction } from "convex/react"
+import { useAction, useConvexAuth } from "convex/react"
 import { useEffect, useRef, useState } from "react"
 
+import { AiForYou } from "@/components/ai-for-you"
 import { DiscoverCard } from "@/components/discover-card"
 import { Input } from "@/components/ui/input"
 import { MediaRow } from "@/components/media-row"
@@ -60,6 +61,7 @@ export default function DiscoverPage() {
 }
 
 function DiscoverContent() {
+  const { isAuthenticated } = useConvexAuth()
   const discoverTrending = useAction(api.tmdb.discoverTrending)
   const discoverPopular = useAction(api.tmdb.discoverPopular)
   const discoverTopRated = useAction(api.tmdb.discoverTopRated)
@@ -267,6 +269,9 @@ function DiscoverContent() {
             </div>
 
             <div className="mt-6 flex flex-col gap-6">
+              {isAuthenticated && !searchActive && (
+                <AiForYou isAuthenticated={isAuthenticated} />
+              )}
               {error ? (
                 <p className="py-16 text-center text-sm text-muted-foreground">
                   Something went wrong loading results. Try again.

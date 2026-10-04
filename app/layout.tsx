@@ -9,6 +9,7 @@ import { shadcn } from "@clerk/ui/themes"
 import { Geist_Mono, Inter } from "next/font/google"
 
 import "@/styles/globals.css"
+import { AiSettingsButton } from "@/components/ai-settings-dialog"
 import { AppHeader } from "@/components/app-header"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -58,6 +59,7 @@ export default function RootLayout({
                     </SignUpButton>
                   </Show>
                   <Show when="signed-in">
+                    <AiSettingsButton />
                     <UserButton />
                   </Show>
                 </div>

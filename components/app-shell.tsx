@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  AiMagicIcon,
   ArrowLeft01Icon,
   Folder01Icon,
   ImageNotFound01Icon,
@@ -12,6 +13,7 @@ import { useAction, useConvexAuth, useQuery } from "convex/react"
 import Image from "next/image"
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { AiDescribe } from "@/components/ai-describe"
 import { CreateCollectionDialog } from "@/components/create-collection-dialog"
 import { ScheduleTab } from "@/components/schedule-tab"
 import { ShowCard } from "@/components/show-card"
@@ -30,6 +32,7 @@ import {
   type MediaItem,
 } from "@/lib/media"
 import { cn } from "@/lib/utils"
+import { useItemStateMap } from "@/components/use-item-state"
 
 const SEARCH_DEBOUNCE_MS = 400
 
@@ -41,13 +44,12 @@ export function AppShell() {
     api.collections.listMine,
     isAuthenticated ? {} : "skip"
   )
-  const memberships = useQuery(
-    api.collections.listMemberships,
-    isAuthenticated ? {} : "skip"
-  )
+  const stateByKey = useItemStateMap(isAuthenticated)
 
   const [query, setQuery] = useState("")
   const [tab, setTab] = useState("watchlist")
+  // AI describe mode replaces the search bar and tab area.
+  const [aiMode, setAiMode] = useState(false)
   // Which collection the Collections tab is showing (null = cards view;
   // reset whenever the tab changes so re-entering shows the cards again).
   const [selectedCollectionId, setSelectedCollectionId] =
@@ -130,28 +132,6 @@ export function AppShell() {
     }
   }
 
-  // Saved state per title, mapped onto search results and list grids.
-  const stateByKey = useMemo(() => {
-    const idsByItem = new Map<Id<"items">, Set<Id<"collections">>>()
-    for (const membership of memberships ?? []) {
-      const ids = idsByItem.get(membership.itemId) ?? new Set()
-      ids.add(membership.collectionId)
-      idsByItem.set(membership.itemId, ids)
-    }
-    const map = new Map<string, ItemState>()
-    for (const item of myItems ?? []) {
-      map.set(mediaKey(item), {
-        itemId: item._id,
-        inWatchlist: item.inWatchlist,
-        watching: item.watching ?? false,
-        watched: item.watched,
-        sentiment: item.sentiment,
-        collectionIds: idsByItem.get(item._id) ?? new Set(),
-      })
-    }
-    return map
-  }, [myItems, memberships])
-
   const watchlistItems = useMemo(
     () =>
       sortByAddedAt(
@@ -198,46 +178,62 @@ export function AppShell() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
-      <div className="relative mx-auto w-full max-w-xl">
-        <HugeiconsIcon
-          icon={Search01Icon}
-          className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          type="search"
-          placeholder="Search movies and shows..."
-          className="pl-9"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            setActiveCardKey(null)
-          }}
-          aria-label="Search movies and shows"
-        />
-      </div>
+      {aiMode ? (
+        <div className="mx-auto w-full max-w-2xl">
+          <AiDescribe gridState={gridProps} onExit={() => setAiMode(false)} />
+        </div>
+      ) : (
+        <>
+          <div className="relative mx-auto w-full max-w-xl">
+            <HugeiconsIcon
+              icon={Search01Icon}
+              className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              type="search"
+              placeholder="Search movies and shows..."
+              className="pl-9 pr-11"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                setActiveCardKey(null)
+              }}
+              aria-label="Search movies and shows"
+            />
+            <Button
+              variant={aiMode ? "default" : "secondary"}
+              size="icon-sm"
+              className="absolute top-1/2 right-1.5 -translate-y-1/2"
+              aria-pressed={aiMode}
+              aria-label="Describe what you want to watch instead"
+              onClick={() => setAiMode(true)}
+            >
+              <HugeiconsIcon icon={AiMagicIcon} />
+            </Button>
+          </div>
 
-      <div className="mt-8">
-        {searchActive ? (
-          <SearchResults
-            results={currentResults?.items ?? null}
-            searching={searching}
-            error={currentError}
-            query={trimmedQuery}
-            hasMore={currentResults?.hasMore ?? false}
-            loadingMore={loadingMore}
-            onLoadMore={loadMore}
-            {...gridProps}
-          />
-        ) : (
-          <Tabs
-            value={tab}
-            onValueChange={(value) => {
-              setTab(String(value))
-              setActiveCardKey(null)
-              // Leaving/re-entering Collections always lands on the cards view.
-              setSelectedCollectionId(null)
-            }}
-          >
+          <div className="mt-8">
+            {searchActive ? (
+              <SearchResults
+                results={currentResults?.items ?? null}
+                searching={searching}
+                error={currentError}
+                query={trimmedQuery}
+                hasMore={currentResults?.hasMore ?? false}
+                loadingMore={loadingMore}
+                onLoadMore={loadMore}
+                {...gridProps}
+              />
+            ) : (
+              <Tabs
+                value={tab}
+                onValueChange={(value) => {
+                  setTab(String(value))
+                  setActiveCardKey(null)
+                  // Leaving/re-entering Collections always lands on the cards view.
+                  setSelectedCollectionId(null)
+                }}
+              >
             <TabsList className="mx-auto">
               <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
               <TabsTrigger value="watched">Watched</TabsTrigger>
@@ -311,7 +307,9 @@ export function AppShell() {
             </TabsContent>
           </Tabs>
         )}
-      </div>
+          </div>
+        </>
+      )}
 
       <CreateCollectionDialog open={createOpen} onOpenChange={setCreateOpen} />
     </main>
