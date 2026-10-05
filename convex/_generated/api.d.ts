@@ -15,6 +15,7 @@ import type * as helpers from "../helpers.js";
 import type * as items from "../items.js";
 import type * as schedule from "../schedule.js";
 import type * as schedule_windows from "../schedule_windows.js";
+import type * as stats from "../stats.js";
 import type * as tmdb from "../tmdb.js";
 import type * as tmdb_cache from "../tmdb_cache.js";
 
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   items: typeof items;
   schedule: typeof schedule;
   schedule_windows: typeof schedule_windows;
+  stats: typeof stats;
   tmdb: typeof tmdb;
   tmdb_cache: typeof tmdb_cache;
 }>;

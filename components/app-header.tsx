@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 export function AppHeader() {
   const pathname = usePathname()
   const discoverActive = pathname === "/discover"
+  const statsActive = pathname === "/stats"
 
   return (
     <div className="flex items-center gap-4">
@@ -24,6 +25,15 @@ export function AppHeader() {
         )}
       >
         Discover
+      </Link>
+      <Link
+        href="/stats"
+        className={cn(
+          "text-sm transition-colors hover:text-foreground",
+          statsActive ? "font-medium text-foreground" : "text-muted-foreground"
+        )}
+      >
+        Stats
       </Link>
     </div>
   )

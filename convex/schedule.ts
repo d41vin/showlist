@@ -86,20 +86,23 @@ export const get = action({
       const results = await Promise.all(
         chunk.map(async (tmdbId) => {
           try {
-            const data = await tmdbFetch(`/tv/${tmdbId}`, {
-              language: "en-US",
-            })
-            return { tmdbId, data }
+            const [data, images] = await Promise.all([
+              tmdbFetch(`/tv/${tmdbId}`, { language: "en-US" }),
+              tmdbFetch(`/tv/${tmdbId}/images`, {
+                include_image_language: "en,null",
+              }),
+            ])
+            return { tmdbId, data, images }
           } catch {
-            return { tmdbId, data: null }
+            return { tmdbId, data: null, images: null }
           }
         })
       )
-      for (const { tmdbId, data } of results) {
+      for (const { tmdbId, data, images } of results) {
         if (data === null) continue
-        // No images fetch here — summaries for the schedule don't need the
-        // logo; the drawer's tmdb.details call fills that in later.
-        const payload = normalizeDetails(data, {}, "tv")
+        // Complete payload — these cache entries are shared with the
+        // details drawer, so a logo-less one would blank the drawer header.
+        const payload = normalizeDetails(data, images ?? {}, "tv")
         summaries[ids.indexOf(tmdbId)] = payload
         toWrite.push({
           key: `details:tv:${tmdbId}:v2`,
