@@ -97,7 +97,10 @@ export const toggle = mutation({
 })
 
 // Bulk mark/unmark a whole season's episodes in one transaction (the drawer's
-// per-season "mark all" / "clear").
+// per-season "mark all" / "clear"). Episode rows must stay within one
+// transaction's write budget, so oversized inputs fail with a clear message.
+const MAX_SEASON_EPISODES = 2000
+
 export const setSeason = mutation({
   args: {
     item: searchResultValidator,
@@ -107,6 +110,11 @@ export const setSeason = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    if (args.episodes.length > MAX_SEASON_EPISODES) {
+      throw new Error(
+        `Too many episodes at once (${args.episodes.length}); limit is ${MAX_SEASON_EPISODES}`
+      )
+    }
     const userId = await requireUserId(ctx)
     const seasonRows = await ctx.db
       .query("episodeWatches")

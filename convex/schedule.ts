@@ -17,6 +17,9 @@ const SEASON_TTL_MS = 24 * 60 * 60 * 1000
 // window; the schedule list stays sane with a per-show cap.
 const MAX_UPCOMING_PER_SHOW = 10
 const FETCH_CHUNK = 6
+// Hard cap on shows per schedule computation — protects TMDB rate limits
+// and response size.
+const SHOW_CAP = 200
 
 const scheduleEpisodeValidator = v.object({
   season: v.number(),
@@ -27,22 +30,29 @@ const scheduleEpisodeValidator = v.object({
 
 export const get = action({
   args: { tmdbIds: v.array(v.number()), today: v.string() },
-  returns: v.array(
-    v.object({
-      tmdbId: v.number(),
-      status: v.union(v.string(), v.null()),
-      upcoming: v.array(scheduleEpisodeValidator),
-      lastEpisode: v.union(scheduleEpisodeValidator, v.null()),
-    })
-  ),
+  returns: v.object({
+    entries: v.array(
+      v.object({
+        tmdbId: v.number(),
+        status: v.union(v.string(), v.null()),
+        upcoming: v.array(scheduleEpisodeValidator),
+        lastEpisode: v.union(scheduleEpisodeValidator, v.null()),
+      })
+    ),
+    // True when more than SHOW_CAP shows were requested — the rest were
+    // silently dropped, and the UI says so.
+    truncated: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) {
       throw new Error("Not signed in")
     }
-    const ids = [...new Set(args.tmdbIds)].slice(0, 200)
+    const unique = [...new Set(args.tmdbIds)]
+    const truncated = unique.length > SHOW_CAP
+    const ids = unique.slice(0, SHOW_CAP)
     if (ids.length === 0) {
-      return []
+      return { entries: [], truncated: false }
     }
     const todayMs = parseDayMs(args.today)
     if (todayMs === null) {
@@ -251,7 +261,7 @@ export const get = action({
         lastEpisode,
       })
     }
-    return out
+    return { entries: out, truncated }
   },
 })
 

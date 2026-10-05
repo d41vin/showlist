@@ -24,7 +24,8 @@ import {
   useItemStateMap,
 } from "@/components/use-item-state"
 
-type ScheduleEntry = FunctionReturnType<typeof api.schedule.get>[number]
+type ScheduleResult = FunctionReturnType<typeof api.schedule.get>
+type ScheduleEntry = ScheduleResult["entries"][number]
 
 // One list row: an episode of a show the user tracks, grouped under its
 // air-date heading.
@@ -71,6 +72,7 @@ export function ScheduleTab({
   const collections = useCollectionSummaries(isAuthenticated)
 
   const [entries, setEntries] = useState<ScheduleEntry[] | null>(null)
+  const [truncated, setTruncated] = useState(false)
   const [failed, setFailed] = useState(false)
   const [retryNonce, setRetryNonce] = useState(0)
 
@@ -83,7 +85,8 @@ export function ScheduleTab({
     scheduleGet({ tmdbIds, today: localTodayISO() })
       .then((result) => {
         if (!cancelled) {
-          setEntries(result)
+          setEntries(result.entries)
+          setTruncated(result.truncated)
         }
       })
       .catch(() => {
@@ -198,6 +201,11 @@ export function ScheduleTab({
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-8">
+      {truncated && (
+        <p className="text-xs text-muted-foreground">
+          Showing the first 200 shows — trim your lists to see more.
+        </p>
+      )}
       <ScheduleSection
         title="Upcoming"
         groups={upcomingGroups}
