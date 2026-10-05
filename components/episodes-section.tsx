@@ -110,18 +110,26 @@ export function EpisodesSection({
   const allMarked = episodes.length > 0 && watchedCount === episodes.length
 
   return (
-    <div className="border-t px-5 py-4">
+    <div className="border-t px-6 py-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold">Episodes</h3>
-        <span className="text-xs text-muted-foreground">
-          {episodes.length > 0
-            ? `${watchedCount}/${episodes.length} watched`
-            : ""}
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Episodes
+        </h3>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {episodes.length > 0 ? `${watchedCount}/${episodes.length}` : ""}
         </span>
       </div>
+      {episodes.length > 0 && (
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-[width]"
+            style={{ width: `${(watchedCount / episodes.length) * 100}%` }}
+          />
+        </div>
+      )}
 
       {/* Season chips — horizontally scrollable when there are many seasons */}
-      <div className="hide-scrollbar -mx-5 mt-2.5 flex gap-1.5 overflow-x-auto px-5 pb-1">
+      <div className="hide-scrollbar -mx-6 mt-3 flex gap-1.5 overflow-x-auto px-6 pb-1">
         {seasons.map((seasonSummary) => (
           <Button
             key={seasonSummary.season}

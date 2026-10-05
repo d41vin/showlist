@@ -4,7 +4,6 @@ import {
   ArrowLeft01Icon,
   ImageNotFound01Icon,
   MoreHorizontalIcon,
-  StarIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction } from "convex/react"
@@ -19,7 +18,6 @@ import {
   Drawer,
   DrawerContent,
   DrawerDescription,
-  DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { api } from "@/convex/_generated/api"
@@ -167,65 +165,73 @@ export function DetailsDrawer({
         showSwipeHandle
       >
         <DrawerContent>
-          <div className="mx-auto flex min-h-0 w-full max-w-lg flex-col overflow-y-auto">
-            {/* Backdrop header — tall, overblown image that cuts cleanly
-                where the details section begins. Drawer's overflow-hidden
-                clips the image to the rounded corners on the sides. */}
+          <div className="mx-auto flex min-h-0 w-full flex-col overflow-y-auto md:max-w-2xl">
+            {/* Cinematic hero: backdrop bleeding into the page background,
+                wordmark + facts + genre chips anchored bottom-left. */}
             <div className="relative shrink-0 overflow-hidden">
-              {/* Backdrop image */}
               {data === null && !failedKeys.has(currentKey) ? (
                 <div className="aspect-[16/9] w-full shrink-0 animate-pulse bg-muted" />
               ) : data?.backdropPath ? (
-                <div className="relative aspect-[4/3] w-full shrink-0 bg-muted">
-                  <Image
-                    src={tmdbBackdropUrl(data.backdropPath)}
-                    alt={`${current.title} backdrop`}
-                    fill
-                    sizes="640px"
-                    className="object-cover"
-                    priority
-                  />
-                </div>
+                <Image
+                  src={tmdbBackdropUrl(data.backdropPath)}
+                  alt={`${current.title} backdrop`}
+                  width={1280}
+                  height={720}
+                  priority
+                  sizes="(max-width: 768px) 100vw, 672px"
+                  className="aspect-[16/9] w-full shrink-0 object-cover"
+                />
               ) : (
                 <div className="aspect-[16/9] w-full shrink-0 bg-muted" />
               )}
 
-              {/* Logo + metadata overlaid at the bottom of the backdrop */}
+              {/* Fade into the page in both themes */}
+              <div
+                aria-hidden
+                className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent"
+              />
+
               {data !== null && !failedKeys.has(currentKey) && (
-                <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 bg-gradient-to-t from-black/50 to-transparent px-5 pt-16 pb-4">
+                <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 px-6 pb-5">
                   {data.logoPath ? (
                     <Image
                       src={tmdbLogoUrl(data.logoPath)}
                       alt={current.title}
-                      width={220}
-                      height={80}
-                      sizes="220px"
-                      className="mx-auto max-h-16 w-auto max-w-[70%] object-contain drop-shadow-lg"
+                      width={260}
+                      height={96}
+                      sizes="260px"
+                      className="max-h-16 w-auto max-w-[65%] self-start object-contain drop-shadow-lg"
                       priority
                     />
                   ) : (
-                    <DrawerTitle className="text-xl font-bold text-white drop-shadow-lg">
+                    <DrawerTitle className="text-2xl font-bold tracking-tight drop-shadow-lg">
                       {current.title}
                     </DrawerTitle>
                   )}
-                  <DrawerHeader className="p-0 text-center">
-                    <DrawerTitle
-                      className={data.logoPath ? "sr-only" : "hidden"}
-                    >
-                      {current.title}
-                    </DrawerTitle>
-                    <DrawerDescription className="text-white/70">
-                      {current.mediaType === "movie" ? "Movie" : "Show"}
-                      {current.year ? ` · ${current.year}` : ""}
-                    </DrawerDescription>
-                  </DrawerHeader>
+                  <DrawerDescription className="sr-only">
+                    {current.mediaType === "movie" ? "Movie" : "Show"}
+                    {current.year ? ` · ${current.year}` : ""}
+                  </DrawerDescription>
+                  <HeroFacts data={data} item={current} />
+                  {data.genres.length > 0 && (
+                    <div className="mt-0.5 flex flex-wrap gap-1.5">
+                      {data.genres.slice(0, 4).map((genre) => (
+                        <span
+                          key={genre}
+                          className="rounded-full border border-border/70 px-2.5 py-0.5 text-xs text-foreground/85 backdrop-blur-sm"
+                        >
+                          {genre}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Drill-down navigation */}
             {drilling && (
-              <div className="px-5 pt-3">
+              <div className="px-6 pt-4">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -240,7 +246,7 @@ export function DetailsDrawer({
 
             {/* Actions */}
             {data !== null && !failedKeys.has(currentKey) && (
-              <div className="flex flex-wrap items-center justify-center gap-1.5 px-5 pt-3 md:justify-start">
+              <div className="flex flex-wrap items-center gap-1.5 px-6 pt-4">
                 <ItemActions
                   item={current}
                   state={currentState}
@@ -250,8 +256,8 @@ export function DetailsDrawer({
               </div>
             )}
 
-            {/* Details */}
-            <div className="px-5 py-4 text-sm">
+            {/* Overview */}
+            <div className="px-6 py-4 text-sm">
               {failedKeys.has(currentKey) ? (
                 <p className="text-muted-foreground">
                   Couldn&rsquo;t load details. Close and try again.
@@ -259,7 +265,7 @@ export function DetailsDrawer({
               ) : data === null ? (
                 <p className="text-muted-foreground">Loading details…</p>
               ) : (
-                <DrawerDetails item={current} data={data} />
+                <DrawerDetails data={data} />
               )}
             </div>
 
@@ -286,49 +292,55 @@ export function DetailsDrawer({
   )
 }
 
-function DrawerDetails({ item, data }: { item: MediaItem; data: ShowDetails }) {
-  const facts: string[] = []
+// Facts moved into the hero; the body is just the reading text now.
+function DrawerDetails({ data }: { data: ShowDetails }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {data.tagline !== null && (
+        <p className="italic text-muted-foreground">{data.tagline}</p>
+      )}
+      {data.overview !== null && data.overview !== "" ? (
+        <p className="text-[15px] leading-relaxed">{data.overview}</p>
+      ) : (
+        <p className="text-muted-foreground">No overview available.</p>
+      )}
+    </div>
+  )
+}
+
+// Type · year · rating · length/status — the streaming-modal meta line.
+function HeroFacts({ data, item }: { data: ShowDetails; item: MediaItem }) {
+  const facts: string[] = [item.mediaType === "movie" ? "Movie" : "Show"]
+  if (item.year !== null) {
+    facts.push(item.year)
+  }
   if (data.voteAverage !== null) {
-    facts.push(`${data.voteAverage.toFixed(1)} / 10`)
+    facts.push(`★ ${data.voteAverage.toFixed(1)}`)
   }
   if (item.mediaType === "movie" && data.runtime !== null) {
     facts.push(`${data.runtime} min`)
   }
   if (item.mediaType === "tv" && data.numberOfSeasons !== null) {
     facts.push(
-      `${data.numberOfSeasons} season${data.numberOfSeasons === 1 ? "" : "s"}` +
-        (data.numberOfEpisodes !== null
-          ? ` · ${data.numberOfEpisodes} episodes`
-          : "")
+      `${data.numberOfSeasons} season${data.numberOfSeasons === 1 ? "" : "s"}`
     )
   }
-  if (data.releaseDate !== null) {
-    facts.push(data.releaseDate)
+  if (item.mediaType === "tv" && data.status !== null) {
+    facts.push(data.status)
   }
   return (
-    <div className="flex flex-col gap-3">
-      {facts.length > 0 && (
-        <p className="flex items-center gap-1.5 text-muted-foreground text-shadow-sm">
-          {data.voteAverage !== null && (
-            <HugeiconsIcon icon={StarIcon} className="size-3.5" />
+    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-medium tracking-wide text-foreground/80">
+      {facts.map((fact, i) => (
+        <span key={fact} className="flex items-center gap-1.5">
+          {i > 0 && (
+            <span aria-hidden className="text-foreground/30">
+              ·
+            </span>
           )}
-          {facts.join(" · ")}
-        </p>
-      )}
-      {data.genres.length > 0 && (
-        <p className="text-muted-foreground text-shadow-sm">
-          {data.genres.join(", ")}
-        </p>
-      )}
-      {data.tagline !== null && (
-        <p className="italic text-shadow-sm">{data.tagline}</p>
-      )}
-      {data.overview !== null && data.overview !== "" ? (
-        <p className="leading-relaxed text-shadow-sm">{data.overview}</p>
-      ) : (
-        <p className="text-muted-foreground">No overview available.</p>
-      )}
-    </div>
+          <span className="drop-shadow-sm">{fact}</span>
+        </span>
+      ))}
+    </p>
   )
 }
 
@@ -347,9 +359,11 @@ function MoreLikeThis({
     return null
   }
   return (
-    <div className="border-t px-5 py-4">
-      <h3 className="text-sm font-semibold">More like this</h3>
-      <div className="hide-scrollbar -mx-5 mt-2.5 flex gap-2.5 overflow-x-auto px-5 pb-1">
+    <div className="border-t px-6 py-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        More like this
+      </h3>
+      <div className="hide-scrollbar -mx-6 mt-3 flex gap-2.5 overflow-x-auto px-6 pb-1">
         {recs === null
           ? Array.from({ length: 6 }, (_, i) => (
               <div key={i} className="flex w-20 shrink-0 flex-col gap-1">
