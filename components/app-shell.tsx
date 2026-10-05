@@ -14,6 +14,7 @@ import Image from "next/image"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { AiDescribe } from "@/components/ai-describe"
+import { ContinueWatching } from "@/components/continue-watching"
 import { CreateCollectionDialog } from "@/components/create-collection-dialog"
 import { ScheduleTab } from "@/components/schedule-tab"
 import { ShowCard } from "@/components/show-card"
@@ -213,6 +214,14 @@ export function AppShell() {
           </div>
 
           <div className="mt-8">
+            {!searchActive && (
+              <ContinueWatching
+                isAuthenticated={isAuthenticated}
+                myItems={myItems}
+                stateByKey={stateByKey}
+                collections={collections}
+              />
+            )}
             {searchActive ? (
               <SearchResults
                 results={currentResults?.items ?? null}

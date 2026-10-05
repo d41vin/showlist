@@ -43,6 +43,7 @@ export function DetailsDrawer({
   state,
   stateByKey,
   collections,
+  trigger,
 }: {
   item: MediaItem
   state: ItemState | undefined
@@ -50,6 +51,9 @@ export function DetailsDrawer({
   // opening card's own state is used as fallback for itself.
   stateByKey?: Map<string, ItemState>
   collections: CollectionSummary[]
+  // Custom trigger (render prop receiving the open callback); defaults to
+  // the standard kebab button.
+  trigger?: (onOpen: () => void) => React.ReactNode
 }) {
   const details = useAction(api.tmdb.details)
   const recommendationsAction = useAction(api.tmdb.recommendations)
@@ -138,15 +142,19 @@ export function DetailsDrawer({
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        className="-mr-1.5 ml-auto text-muted-foreground"
-        aria-label={`Details for ${item.title}`}
-        onClick={() => setOpen(true)}
-      >
-        <HugeiconsIcon icon={MoreHorizontalIcon} />
-      </Button>
+      {trigger ? (
+        trigger(() => setOpen(true))
+      ) : (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="-mr-1.5 ml-auto text-muted-foreground"
+          aria-label={`Details for ${item.title}`}
+          onClick={() => setOpen(true)}
+        >
+          <HugeiconsIcon icon={MoreHorizontalIcon} />
+        </Button>
+      )}
       <Drawer
         open={open}
         onOpenChange={(next) => {
