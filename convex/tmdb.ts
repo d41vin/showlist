@@ -55,6 +55,7 @@ export const seasonEpisodesValidator = v.object({
 const DETAILS_TTL_MS = 12 * 60 * 60 * 1000
 const SEASON_TTL_MS = 24 * 60 * 60 * 1000
 const RECOMMENDATIONS_TTL_MS = 24 * 60 * 60 * 1000
+const GENRES_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 const detailsValidator = v.object({
   overview: v.union(v.string(), v.null()),
@@ -324,7 +325,6 @@ export const tvSeason = action({
   },
 })
 
-
 // Native TMDB recommendations for one title — "More like this" in the
 // details drawer. No LLM involved.
 export const recommendations = action({
@@ -357,6 +357,103 @@ export const recommendations = action({
       entries: [{ key: cacheKey, payload: items, fetchedAt: Date.now() }],
     })
     return items
+  },
+})
+
+// Genre lists per media type — the Discover browse filter's options.
+export const genres = action({
+  args: { mediaType: mediaTypeValidator },
+  returns: v.array(v.object({ id: v.number(), name: v.string() })),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const cacheKey = `genres:${args.mediaType}:v1`
+    const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
+      keys: [cacheKey],
+    })) as CacheEntry[]
+    if (
+      cached?.payload != null &&
+      Date.now() - cached.fetchedAt < GENRES_TTL_MS
+    ) {
+      return cached.payload as Infer<typeof genresValidator>
+    }
+
+    const data = await tmdbFetch(`/genre/${args.mediaType}/list`, {
+      language: "en-US",
+    })
+    const raw = Array.isArray(data.genres) ? data.genres : []
+    const list = raw
+      .map((g: Record<string, unknown>) => ({
+        id: typeof g.id === "number" ? g.id : -1,
+        name: typeof g.name === "string" ? g.name : "",
+      }))
+      .filter((g) => g.id >= 0 && g.name !== "")
+
+    await ctx.runMutation(internal.tmdb_cache.putBatch, {
+      entries: [{ key: cacheKey, payload: list, fetchedAt: Date.now() }],
+    })
+    return list
+  },
+})
+
+const genresValidator = v.array(v.object({ id: v.number(), name: v.string() }))
+
+export type DiscoverSort = "popularity" | "rating" | "newest"
+
+// Discover-by-filters for the browse mode: genre + sort, paginated like
+// search. Rating and newest sorts get a vote-count floor so obscurities
+// don't dominate.
+export const discover = action({
+  args: {
+    mediaType: mediaTypeValidator,
+    genre: v.number(),
+    sort: v.union(
+      v.literal("popularity"),
+      v.literal("rating"),
+      v.literal("newest")
+    ),
+    page: v.optional(v.number()),
+  },
+  returns: v.object({
+    items: v.array(searchResultValidator),
+    hasMore: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const sortBy =
+      args.sort === "popularity"
+        ? "popularity.desc"
+        : args.sort === "rating"
+          ? "vote_average.desc"
+          : args.mediaType === "movie"
+            ? "primary_release_date.desc"
+            : "first_air_date.desc"
+    const params: Record<string, string> = {
+      language: "en-US",
+      sort_by: sortBy,
+      include_adult: "false",
+      page: String(args.page ?? 1),
+      with_genres: String(args.genre),
+    }
+    if (args.sort === "rating") {
+      params["vote_count.gte"] = "300"
+    } else if (args.sort === "newest") {
+      params["vote_count.gte"] = "10"
+    }
+    const data = await tmdbFetch(`/discover/${args.mediaType}`, params)
+    const results = Array.isArray(data.results) ? data.results : []
+    const items = normalizeResults(results, args.mediaType)
+    const totalPages =
+      typeof data.total_pages === "number" ? data.total_pages : (args.page ?? 1)
+    return {
+      items,
+      hasMore: (args.page ?? 1) < Math.min(totalPages, 500),
+    }
   },
 })
 

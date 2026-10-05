@@ -30,6 +30,10 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  MediaTypeToggle,
+  type MediaTypeFilter,
+} from "@/components/media-type-toggle"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -62,6 +66,8 @@ export function AppShell() {
 
   const [query, setQuery] = useState("")
   const [tab, setTab] = useState("watchlist")
+  // Type filter chips over search results (client-side).
+  const [searchType, setSearchType] = useState<MediaTypeFilter>("all")
   // AI describe mode replaces the search bar and tab area.
   const [aiMode, setAiMode] = useState(false)
   // Which collection the Collections tab is showing (null = cards view;
@@ -190,6 +196,15 @@ export function AppShell() {
 
   const currentResults =
     results !== null && results.query === trimmedQuery ? results : null
+  const typeFilteredResults =
+    currentResults === null
+      ? null
+      : {
+          ...currentResults,
+          items: currentResults.items.filter(
+            (item) => searchType === "all" || item.mediaType === searchType
+          ),
+        }
   const currentError = errorQuery === trimmedQuery
   const searching = searchActive && currentResults === null && !currentError
 
@@ -246,16 +261,24 @@ export function AppShell() {
               />
             )}
             {searchActive ? (
-              <SearchResults
-                results={currentResults?.items ?? null}
-                searching={searching}
-                error={currentError}
-                query={trimmedQuery}
-                hasMore={currentResults?.hasMore ?? false}
-                loadingMore={loadingMore}
-                onLoadMore={loadMore}
-                {...gridProps}
-              />
+              <>
+                <div className="mb-6 flex justify-center">
+                  <MediaTypeToggle
+                    value={searchType}
+                    onChange={setSearchType}
+                  />
+                </div>
+                <SearchResults
+                  results={typeFilteredResults?.items ?? null}
+                  searching={searching}
+                  error={currentError}
+                  query={trimmedQuery}
+                  hasMore={currentResults?.hasMore ?? false}
+                  loadingMore={loadingMore}
+                  onLoadMore={loadMore}
+                  {...gridProps}
+                />
+              </>
             ) : (
               <Tabs
                 value={tab}

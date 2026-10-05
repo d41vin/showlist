@@ -126,9 +126,8 @@ export function DeleteCollectionDialog({
         <DialogHeader>
           <DialogTitle>Delete “{target?.name}”?</DialogTitle>
           <DialogDescription>
-            The {target?.itemCount === 1 ? "item" : "items"} in it stay in
-            your lists — only the collection goes away. This cannot be
-            undone.
+            The {target?.itemCount === 1 ? "item" : "items"} in it stay in your
+            lists — only the collection goes away. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

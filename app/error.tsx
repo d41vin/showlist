@@ -23,8 +23,8 @@ export default function ErrorPage({
         Something went wrong
       </h1>
       <p className="max-w-md text-sm text-muted-foreground">
-        An unexpected error occurred. Try again — if it keeps happening,
-        reload the page.
+        An unexpected error occurred. Try again — if it keeps happening, reload
+        the page.
       </p>
       <Button onClick={() => unstable_retry()}>Try again</Button>
     </main>

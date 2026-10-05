@@ -53,8 +53,7 @@ export function ContinueWatching({
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    const tmdbIds =
-      tmdbIdsKey === "" ? [] : tmdbIdsKey.split(",").map(Number)
+    const tmdbIds = tmdbIdsKey === "" ? [] : tmdbIdsKey.split(",").map(Number)
     if (!isAuthenticated || tmdbIds.length === 0) {
       return
     }

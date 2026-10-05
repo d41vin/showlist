@@ -270,16 +270,13 @@ function EpisodeRow({
           >
             <HugeiconsIcon
               icon={ChevronDownIcon}
-              className={cn(
-                "transition-transform",
-                expanded && "rotate-180"
-              )}
+              className={cn("transition-transform", expanded && "rotate-180")}
             />
           </Button>
         )}
       </div>
       {expanded && hasOverview && (
-        <p className="mt-1.5 pl-14 pr-8 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1.5 pr-8 pl-14 text-xs leading-relaxed text-muted-foreground">
           {episode.overview}
         </p>
       )}

@@ -20,11 +20,18 @@ import {
   MediaTypeToggle,
   type MediaTypeFilter,
 } from "@/components/media-type-toggle"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
-import { type MediaItem } from "@/lib/media"
+import { mediaKey, type MediaItem } from "@/lib/media"
 
 const SEARCH_DEBOUNCE_MS = 400
 
@@ -70,6 +77,8 @@ function DiscoverContent() {
   const discoverPopular = useAction(api.tmdb.discoverPopular)
   const discoverTopRated = useAction(api.tmdb.discoverTopRated)
   const discoverNowPlaying = useAction(api.tmdb.discoverNowPlaying)
+  const discoverByFilters = useAction(api.tmdb.discover)
+  const genresAction = useAction(api.tmdb.genres)
   const search = useAction(api.tmdb.search)
 
   // Card state so discovery results carry the full action overlay.
@@ -108,6 +117,24 @@ function DiscoverContent() {
   const [searchResults, setSearchResults] = useState<MediaItem[] | null>(null)
   const [searchError, setSearchError] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
+  const [searchType, setSearchType] = useState<MediaTypeFilter>("all")
+
+  // Browse-by-genre state (null genre = curated rows mode). Results are
+  // stored keyed by their filter combo so changing filters derives the
+  // loading state instead of resetting it in an effect.
+  const [genre, setGenre] = useState<number | null>(null)
+  const [sortBy, setSortBy] = useState<"popularity" | "rating" | "newest">(
+    "popularity"
+  )
+  const [genreList, setGenreList] = useState<{ id: number; name: string }[]>([])
+  const [browseStore, setBrowseStore] = useState<{
+    key: string
+    items: MediaItem[]
+    page: number
+    hasMore: boolean
+  } | null>(null)
+  const [browseFailed, setBrowseFailed] = useState<string | null>(null)
+  const [loadingMoreBrowse, setLoadingMoreBrowse] = useState(false)
   const requestIdRef = useRef(0)
   const discoverRequestIdRef = useRef(0)
 
@@ -228,6 +255,132 @@ function DiscoverContent() {
     discoverNowPlaying,
   ])
 
+  const browseType = mediaType === "all" ? "movie" : mediaType
+  const browseKey =
+    genre === null || searchActive ? null : `${browseType}:${genre}:${sortBy}`
+  const currentBrowse =
+    browseStore !== null && browseStore.key === browseKey ? browseStore : null
+  const browseLoading =
+    browseKey !== null && currentBrowse === null && browseFailed !== browseKey
+
+  // Genre options for the selected type ("all" browses movies by default —
+  // picking a genre flips the type toggle to Movies).
+  useEffect(() => {
+    let cancelled = false
+    genresAction({ mediaType: browseType })
+      .then((list) => {
+        if (!cancelled) {
+          setGenreList(list)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGenreList([])
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [browseType, genresAction])
+
+  useEffect(() => {
+    if (
+      browseKey === null ||
+      browseStore?.key === browseKey ||
+      browseFailed === browseKey
+    ) {
+      return
+    }
+    if (genre === null) {
+      return
+    }
+    let cancelled = false
+    discoverByFilters({
+      mediaType: browseType,
+      genre,
+      sort: sortBy,
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setBrowseStore({
+            key: browseKey,
+            items: result.items,
+            page: 1,
+            hasMore: result.hasMore,
+          })
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBrowseFailed(browseKey)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    browseKey,
+    browseStore,
+    browseFailed,
+    genre,
+    browseType,
+    sortBy,
+    searchActive,
+    discoverByFilters,
+  ])
+
+  const loadMoreBrowse = async () => {
+    if (
+      browseKey === null ||
+      currentBrowse === null ||
+      !currentBrowse.hasMore ||
+      loadingMoreBrowse ||
+      genre === null
+    ) {
+      return
+    }
+    setLoadingMoreBrowse(true)
+    try {
+      const result = await discoverByFilters({
+        mediaType: browseType,
+        genre,
+        sort: sortBy,
+        page: currentBrowse.page + 1,
+      })
+      const seen = new Set(currentBrowse.items.map(mediaKey))
+      setBrowseStore({
+        key: browseKey,
+        items: [
+          ...currentBrowse.items,
+          ...result.items.filter((item) => !seen.has(mediaKey(item))),
+        ],
+        page: currentBrowse.page + 1,
+        hasMore: result.hasMore,
+      })
+    } catch {
+      // Keep the grid; the button stays for a retry.
+    } finally {
+      setLoadingMoreBrowse(false)
+    }
+  }
+
+  const typeFilteredResults =
+    searchResults === null
+      ? null
+      : searchResults.filter(
+          (item) => searchType === "all" || item.mediaType === searchType
+        )
+
+  const genreSelectItems = [
+    { value: "all", label: "All genres" },
+    ...genreList.map((g) => ({ value: String(g.id), label: g.name })),
+  ]
+  const sortSelectItems = [
+    { value: "popularity", label: "Most popular" },
+    { value: "rating", label: "Highest rated" },
+    { value: "newest", label: "Newest" },
+  ]
+
   const GRID_CLASS =
     "grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 
@@ -235,6 +388,7 @@ function DiscoverContent() {
     !searchActive &&
     !loading &&
     !error &&
+    genre === null &&
     category === "trending" &&
     rows[0]?.items[0] !== undefined
       ? rows[0].items[0]
@@ -262,6 +416,9 @@ function DiscoverContent() {
         {searchActive ? (
           /* Search results */
           <>
+            <div className="mb-6 flex justify-center">
+              <MediaTypeToggle value={searchType} onChange={setSearchType} />
+            </div>
             {searchLoading ? (
               <div className={GRID_CLASS}>
                 {Array.from({ length: 12 }, (_, i) => (
@@ -276,14 +433,22 @@ function DiscoverContent() {
               <p className="py-16 text-center text-sm text-muted-foreground">
                 Something went wrong searching. Try again.
               </p>
-            ) : searchResults !== null && searchResults.length > 0 ? (
+            ) : typeFilteredResults !== null &&
+              typeFilteredResults.length > 0 ? (
               <div className={GRID_CLASS}>
-                {searchResults.map((item) => (
+                {typeFilteredResults.map((item) => (
                   <div key={`${item.mediaType}:${item.tmdbId}`}>
                     {renderCard(item)}
                   </div>
                 ))}
               </div>
+            ) : typeFilteredResults !== null &&
+              searchResults !== null &&
+              searchResults.length > 0 ? (
+              <p className="py-16 text-center text-sm text-muted-foreground">
+                No {searchType === "movie" ? "movies" : "shows"} matched &quot;
+                {trimmedQuery}&quot;.
+              </p>
             ) : searchResults !== null ? (
               <p className="py-16 text-center text-sm text-muted-foreground">
                 No movies or shows found for &quot;{trimmedQuery}&quot;.
@@ -309,14 +474,113 @@ function DiscoverContent() {
                 <TabsTrigger value="top-rated">Top Rated</TabsTrigger>
                 <TabsTrigger value="in-theaters">In Theaters</TabsTrigger>
               </TabsList>
-              <MediaTypeToggle value={mediaType} onChange={setMediaType} />
+              <MediaTypeToggle
+                value={mediaType}
+                onChange={(next) => {
+                  // Genre ids differ between movies and TV.
+                  setGenre(null)
+                  setMediaType(next)
+                }}
+              />
+            </div>
+
+            {/* Browse by genre; sort applies within browse mode */}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <Select
+                items={genreSelectItems}
+                value={genre === null ? "all" : String(genre)}
+                onValueChange={(value) => {
+                  const v = String(value)
+                  if (v === "all") {
+                    setGenre(null)
+                    return
+                  }
+                  if (mediaType === "all") {
+                    setMediaType("movie")
+                  }
+                  setGenre(Number(v))
+                }}
+              >
+                <SelectTrigger className="w-44" aria-label="Genre">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {genreSelectItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {genre !== null && (
+                <Select
+                  items={sortSelectItems}
+                  value={sortBy}
+                  onValueChange={(value) =>
+                    setSortBy(value as "popularity" | "rating" | "newest")
+                  }
+                >
+                  <SelectTrigger className="w-40" aria-label="Sort by">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sortSelectItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="mt-6 flex flex-col gap-6">
-              {isAuthenticated && !error && !loading && (
+              {isAuthenticated && !error && !loading && genre === null && (
                 <AiForYou isAuthenticated={isAuthenticated} />
               )}
-              {error ? (
+              {genre !== null ? (
+                browseFailed === browseKey ? (
+                  <p className="py-16 text-center text-sm text-muted-foreground">
+                    Something went wrong loading results. Try again.
+                  </p>
+                ) : browseLoading ? (
+                  <div className={GRID_CLASS}>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <div key={i} className="flex flex-col gap-1.5">
+                        <Skeleton className="aspect-2/3 w-full rounded-lg" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-3 w-1/2" />
+                      </div>
+                    ))}
+                  </div>
+                ) : currentBrowse !== null && currentBrowse.items.length > 0 ? (
+                  <>
+                    <div className={GRID_CLASS}>
+                      {currentBrowse.items.map((item) => (
+                        <div key={`${item.mediaType}:${item.tmdbId}`}>
+                          {renderCard(item)}
+                        </div>
+                      ))}
+                    </div>
+                    {currentBrowse.hasMore && (
+                      <div className="flex justify-center">
+                        <Button
+                          variant="outline"
+                          onClick={() => void loadMoreBrowse()}
+                          disabled={loadingMoreBrowse}
+                        >
+                          {loadingMoreBrowse ? "Loading..." : "Load more"}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : currentBrowse !== null ? (
+                  <p className="py-16 text-center text-sm text-muted-foreground">
+                    Nothing found for that genre and sort — try another
+                    combination.
+                  </p>
+                ) : null
+              ) : error ? (
                 <p className="py-16 text-center text-sm text-muted-foreground">
                   Something went wrong loading results. Try again.
                 </p>

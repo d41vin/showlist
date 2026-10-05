@@ -192,7 +192,7 @@ export function DetailsDrawer({
 
               {/* Logo + metadata overlaid at the bottom of the backdrop */}
               {data !== null && !failedKeys.has(currentKey) && (
-                <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 px-5 pb-4 pt-16 bg-gradient-to-t from-black/50 to-transparent">
+                <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 bg-gradient-to-t from-black/50 to-transparent px-5 pt-16 pb-4">
                   {data.logoPath ? (
                     <Image
                       src={tmdbLogoUrl(data.logoPath)}
@@ -308,7 +308,7 @@ function DrawerDetails({ item, data }: { item: MediaItem; data: ShowDetails }) {
   return (
     <div className="flex flex-col gap-3">
       {facts.length > 0 && (
-        <p className="flex items-center gap-1.5 text-shadow-sm text-muted-foreground">
+        <p className="flex items-center gap-1.5 text-muted-foreground text-shadow-sm">
           {data.voteAverage !== null && (
             <HugeiconsIcon icon={StarIcon} className="size-3.5" />
           )}
@@ -316,15 +316,15 @@ function DrawerDetails({ item, data }: { item: MediaItem; data: ShowDetails }) {
         </p>
       )}
       {data.genres.length > 0 && (
-        <p className="text-shadow-sm text-muted-foreground">
+        <p className="text-muted-foreground text-shadow-sm">
           {data.genres.join(", ")}
         </p>
       )}
       {data.tagline !== null && (
-        <p className="text-shadow-sm italic">{data.tagline}</p>
+        <p className="italic text-shadow-sm">{data.tagline}</p>
       )}
       {data.overview !== null && data.overview !== "" ? (
-        <p className="text-shadow-sm leading-relaxed">{data.overview}</p>
+        <p className="leading-relaxed text-shadow-sm">{data.overview}</p>
       ) : (
         <p className="text-muted-foreground">No overview available.</p>
       )}
