@@ -6,6 +6,7 @@ import {
   UserButton,
 } from "@clerk/nextjs"
 import { shadcn } from "@clerk/ui/themes"
+import type { Metadata } from "next"
 import { Geist_Mono, Inter } from "next/font/google"
 
 import "@/styles/globals.css"
@@ -16,6 +17,15 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+
+export const metadata: Metadata = {
+  title: {
+    default: "ShowList — track movies & TV",
+    template: "%s · ShowList",
+  },
+  description:
+    "A minimal tracker for movies and TV shows. Keep a watchlist, tick episodes you've seen, and see what airs next.",
+}
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
 
