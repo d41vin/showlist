@@ -56,6 +56,61 @@ const DETAILS_TTL_MS = 12 * 60 * 60 * 1000
 const SEASON_TTL_MS = 24 * 60 * 60 * 1000
 const RECOMMENDATIONS_TTL_MS = 24 * 60 * 60 * 1000
 const GENRES_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const WATCH_PROVIDERS_TTL_MS = 30 * 24 * 60 * 60 * 1000
+// Watch-provider availability region for the Discover "Only on" section.
+const WATCH_REGION = "US"
+
+// Streaming providers available in WATCH_REGION (movie list — ids are the
+// same across movie/tv), for the "Only on" rail.
+const watchProviderValidator = v.object({
+  id: v.number(),
+  name: v.string(),
+  logoPath: v.union(v.string(), v.null()),
+})
+
+export const watchProviders = action({
+  args: {},
+  returns: v.array(watchProviderValidator),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const cacheKey = `watch-providers:${WATCH_REGION}:v1`
+    const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
+      keys: [cacheKey],
+    })) as CacheEntry[]
+    if (
+      cached?.payload != null &&
+      Date.now() - cached.fetchedAt < WATCH_PROVIDERS_TTL_MS
+    ) {
+      return cached.payload as WatchProviderPayload[]
+    }
+
+    const data = await tmdbFetch(`/watch/providers/movie`, {
+      language: "en-US",
+      watch_region: WATCH_REGION,
+    })
+    const raw = Array.isArray(data.results) ? data.results : []
+    // keep a curated size: TMDB returns 200+ providers incl. niche VOD
+    const list = raw
+      .map((r: Record<string, unknown>) => ({
+        id: typeof r.provider_id === "number" ? r.provider_id : -1,
+        name: typeof r.provider_name === "string" ? r.provider_name : "",
+        logoPath:
+          typeof r.logo_path === "string" ? r.logo_path : null,
+      }))
+      .filter(
+        (r) => r.id >= 0 && r.name !== "" && r.logoPath !== null
+      )
+      .slice(0, 40)
+
+    await ctx.runMutation(internal.tmdb_cache.putBatch, {
+      entries: [{ key: cacheKey, payload: list, fetchedAt: Date.now() }],
+    })
+    return list
+  },
+})
 
 const detailsValidator = v.object({
   overview: v.union(v.string(), v.null()),
@@ -77,6 +132,7 @@ const detailsValidator = v.object({
 type DetailsPayload = Infer<typeof detailsValidator>
 type SeasonEpisodesPayload = Infer<typeof seasonEpisodesValidator>
 type SearchResultPayload = Infer<typeof searchResultValidator>
+type WatchProviderPayload = Infer<typeof watchProviderValidator>
 // Shape of one entry from tmdb_cache.getBatch; the annotation breaks the
 // TS circularity that runQuery results would otherwise create here.
 type CacheEntry = { payload: unknown; fetchedAt: number }
@@ -360,10 +416,12 @@ export const recommendations = action({
   },
 })
 
+const genreValidator = v.object({ id: v.number(), name: v.string() })
+
 // Genre lists per media type — the Discover browse filter's options.
 export const genres = action({
   args: { mediaType: mediaTypeValidator },
-  returns: v.array(v.object({ id: v.number(), name: v.string() })),
+  returns: v.array(genreValidator),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) {
@@ -377,7 +435,7 @@ export const genres = action({
       cached?.payload != null &&
       Date.now() - cached.fetchedAt < GENRES_TTL_MS
     ) {
-      return cached.payload as Infer<typeof genresValidator>
+      return cached.payload as Infer<typeof genreValidator>[]
     }
 
     const data = await tmdbFetch(`/genre/${args.mediaType}/list`, {
@@ -398,8 +456,6 @@ export const genres = action({
   },
 })
 
-const genresValidator = v.array(v.object({ id: v.number(), name: v.string() }))
-
 export type DiscoverSort = "popularity" | "rating" | "newest"
 
 // Discover-by-filters for the browse mode: genre + sort, paginated like
@@ -408,7 +464,9 @@ export type DiscoverSort = "popularity" | "rating" | "newest"
 export const discover = action({
   args: {
     mediaType: mediaTypeValidator,
-    genre: v.number(),
+    // At least one of genre / watchProvider must be set.
+    genre: v.optional(v.number()),
+    watchProvider: v.optional(v.number()),
     sort: v.union(
       v.literal("popularity"),
       v.literal("rating"),
@@ -433,12 +491,22 @@ export const discover = action({
           : args.mediaType === "movie"
             ? "primary_release_date.desc"
             : "first_air_date.desc"
+    if (args.genre === undefined && args.watchProvider === undefined) {
+      throw new Error("discover requires a genre or watchProvider filter")
+    }
     const params: Record<string, string> = {
       language: "en-US",
       sort_by: sortBy,
       include_adult: "false",
       page: String(args.page ?? 1),
-      with_genres: String(args.genre),
+    }
+    if (args.genre !== undefined) {
+      params.with_genres = String(args.genre)
+    }
+    if (args.watchProvider !== undefined) {
+      // Availability is region-dependent; the UI offers a fixed region.
+      params.with_watch_providers = String(args.watchProvider)
+      params.watch_region = WATCH_REGION
     }
     if (args.sort === "rating") {
       params["vote_count.gte"] = "300"

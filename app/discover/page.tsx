@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react"
 
 import { AiForYou } from "@/components/ai-for-you"
 import { DiscoverHero } from "@/components/discover-hero"
+import { ProviderRail } from "@/components/provider-rail"
 import { ShowCard } from "@/components/show-card"
 import {
   useCollectionSummaries,
@@ -466,6 +467,8 @@ function DiscoverContent() {
                 <DiscoverHero item={heroItem} gridState={gridState} />
               </div>
             )}
+
+            <ProviderRail gridState={gridState} />
 
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
               <TabsList>
