@@ -5,8 +5,11 @@ import {
   ArrowLeft01Icon,
   Folder01Icon,
   ImageNotFound01Icon,
+  MoreVerticalIcon,
+  PencilEdit01Icon,
   PlusSignIcon,
   Search01Icon,
+  Delete02Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction, useConvexAuth, useQuery } from "convex/react"
@@ -14,6 +17,10 @@ import Image from "next/image"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { AiDescribe } from "@/components/ai-describe"
+import {
+  DeleteCollectionDialog,
+  RenameCollectionDialog,
+} from "@/components/collection-admin-dialogs"
 import { ContinueWatching } from "@/components/continue-watching"
 import { CreateCollectionDialog } from "@/components/create-collection-dialog"
 import { ScheduleTab } from "@/components/schedule-tab"
@@ -22,6 +29,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { api } from "@/convex/_generated/api"
 import { type Id } from "@/convex/_generated/dataModel"
 import {
@@ -56,6 +69,16 @@ export function AppShell() {
   const [selectedCollectionId, setSelectedCollectionId] =
     useState<Id<"collections"> | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  // Kebab actions on collection cards.
+  const [renameTarget, setRenameTarget] = useState<{
+    id: Id<"collections">
+    name: string
+  } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: Id<"collections">
+    name: string
+    itemCount: number
+  } | null>(null)
   // Key of the card whose overlay is persistently open (one at a time).
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null)
   // Results/error are tagged with the query they belong to, so "searching"
@@ -287,6 +310,10 @@ export function AppShell() {
                       loading={myCollections === undefined}
                       onOpen={setSelectedCollectionId}
                       onCreate={() => setCreateOpen(true)}
+                      onRename={(id, name) => setRenameTarget({ id, name })}
+                      onDelete={(id, name, itemCount) =>
+                        setDeleteTarget({ id, name, itemCount })
+                      }
                     />
                   ) : (
                     <>
@@ -321,6 +348,22 @@ export function AppShell() {
       )}
 
       <CreateCollectionDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <RenameCollectionDialog
+        target={renameTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRenameTarget(null)
+          }
+        }}
+      />
+      <DeleteCollectionDialog
+        target={deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null)
+          }
+        }}
+      />
     </main>
   )
 }
@@ -440,11 +483,15 @@ function CollectionCards({
   loading,
   onOpen,
   onCreate,
+  onRename,
+  onDelete,
 }: {
   collections: CollectionPreview[]
   loading: boolean
   onOpen: (id: Id<"collections">) => void
   onCreate: () => void
+  onRename: (id: Id<"collections">, name: string) => void
+  onDelete: (id: Id<"collections">, name: string, itemCount: number) => void
 }) {
   if (loading) {
     return (
@@ -477,6 +524,10 @@ function CollectionCards({
           key={collection._id}
           collection={collection}
           onOpen={() => onOpen(collection._id)}
+          onRename={() => onRename(collection._id, collection.name)}
+          onDelete={() =>
+            onDelete(collection._id, collection.name, collection.itemCount)
+          }
         />
       ))}
     </div>
@@ -486,26 +537,54 @@ function CollectionCards({
 function CollectionCard({
   collection,
   onOpen,
+  onRename,
+  onDelete,
 }: {
   collection: CollectionPreview
   onOpen: () => void
+  onRename: () => void
+  onDelete: () => void
 }) {
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group flex min-w-0 cursor-pointer flex-col gap-1.5 text-left"
-    >
-      <div className="aspect-video w-full overflow-hidden rounded-lg bg-muted transition-[filter] group-hover:brightness-90">
+    <div className="group relative flex min-w-0 flex-col gap-1.5 text-left">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="aspect-video w-full cursor-pointer overflow-hidden rounded-lg bg-muted transition-[filter] group-hover:brightness-90"
+      >
         <CollectionMosaic posters={collection.previewPosters} />
-      </div>
-      <div className="min-w-0">
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="absolute top-1.5 right-1.5 rounded-full bg-background/80 backdrop-blur"
+              aria-label={`Options for ${collection.name}`}
+            />
+          }
+        >
+          <HugeiconsIcon icon={MoreVerticalIcon} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onRename}>
+            <HugeiconsIcon icon={PencilEdit01Icon} />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={onDelete}>
+            <HugeiconsIcon icon={Delete02Icon} />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <div className="min-w-0 pr-6">
         <p className="truncate text-sm font-medium">{collection.name}</p>
         <p className="text-xs text-muted-foreground">
           {formatItemCount(collection.itemCount)}
         </p>
       </div>
-    </button>
+    </div>
   )
 }
 

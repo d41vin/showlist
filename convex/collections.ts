@@ -195,3 +195,54 @@ export const removeItem = mutation({
     return null
   },
 })
+
+// Renames a collection. Empty names are rejected like create.
+export const rename = mutation({
+  args: { collectionId: v.id("collections"), name: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx)
+    await requireCollection(ctx, userId, args.collectionId)
+    const name = args.name.trim()
+    if (name === "") {
+      throw new Error("Collection name cannot be empty")
+    }
+    await ctx.db.patch("collections", args.collectionId, { name })
+    return null
+  },
+})
+
+// Deletes a collection and its memberships. Items whose only tie was this
+// collection run through the cleanup rule — with a cap: pathological
+// collections keep their items (they become invisible, no flags lost).
+const CLEANUP_ITEM_CAP = 500
+
+export const remove = mutation({
+  args: { collectionId: v.id("collections") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx)
+    await requireCollection(ctx, userId, args.collectionId)
+    const memberships = await ctx.db
+      .query("collectionItems")
+      .withIndex("by_collection", (q) =>
+        q.eq("collectionId", args.collectionId)
+      )
+      .collect()
+    if (memberships.length <= CLEANUP_ITEM_CAP) {
+      for (const membership of memberships) {
+        const item = await ctx.db.get("items", membership.itemId)
+        await ctx.db.delete("collectionItems", membership._id)
+        if (item !== null) {
+          await deleteIfFullyUnset(ctx, item)
+        }
+      }
+    } else {
+      for (const membership of memberships) {
+        await ctx.db.delete("collectionItems", membership._id)
+      }
+    }
+    await ctx.db.delete("collections", args.collectionId)
+    return null
+  },
+})
