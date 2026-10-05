@@ -7,6 +7,54 @@
 
 ## Status
 
+**Session 6 — Feature completion pass (branch `improvements`): COMPLETE, awaiting user verification.**
+Builds on session 5; same branch, same verification gates.
+
+## Session 6 summary — Feature completion pass (2026-10-05)
+
+User decisions locked first: NO notifications / ratings / social / sharing
+/ PWA; episode ticks stay personal accounting (Watched never auto-marks
+episodes); AI stays explicit-generate. Then, per session scope:
+
+1. **App polish** (`3f7f646`): `app/error.tsx` (this Next version uses
+   `unstable_retry`, NOT `reset`), `app/not-found.tsx`, root metadata.
+2. **Audit fixes** (`a22bd95`): schedule.get returns `{entries, truncated}`
+   (cap surfaced in UI); episodes.setSeason rejects >2000 episodes.
+3. **Drawer content** (`b774c34`): expandable episode synopses; "More like
+   this" via native TMDB recommendations (cached 24h) with in-place
+   drill-down (Back returns); optional `stateByKey` prop threads real
+   saved state to drilled items (all call sites pass it).
+4. **Continue Watching** (`27b2ade`): home row of shows marked Watching
+   with next-episode captions; DetailsDrawer gained a render-prop trigger.
+5. **Collections rename/delete** (`c19cdec`): mutations + kebab menu +
+   dialogs; delete runs the item cleanup rule (cap 500).
+6. **Browse filters** (`5c5c7b2`): tmdb.genres + tmdb.discover (genre/sort,
+   vote-count floors); genre select switches Discover to a browse grid;
+   All/Movies/TV chips filter search results on home + discover; shadcn
+   `select` added.
+7. **Provider rail** (`2f39d9f`): tmdb.watchProviders (US region, 30d
+   cache); "Only on {service}" section between hero and tabs — logo tile
+   rail, picking one shows that service's popular titles as ShowCards.
+   tmdb.discover gained optional watchProvider + watch_region (US).
+8. **Stats** (`e32508b`): /stats page — reactive counts + estimated watch
+   time via stats.get (runtimes from the shared cache; TTL-checked; stale
+   entries refetch and write back FULL drawer-compatible payloads — a
+   minimal-payload cache-poisoning bug in schedule.ts was found and fixed
+   here too: stale schedule refetches now include the images fetch).
+9. **Drawer redesign** (`be0e1d5`): cinematic hero (16:9 backdrop fading
+   into page background in both themes, left-aligned wordmark, meta line
+   with show status, genre chips), md:max-w-2xl sheet, swiss uppercase
+   section labels, per-season progress bar in Episodes.
+
+⚠️ Cache note: tmdbCache entries written before session 6 by schedule
+carried logoPath:null; they self-heal as the 6h TTL expires.
+
+**Verified:** typecheck, lint, 13 vitest tests, build, convex deploys all
+clean; recommendations/genres/discover/watchProviders/stats smoke-tested
+via `npx convex run` with mock identity. Signed-in UI awaits user testing.
+
+## Previous status
+
 **Session 5 — Improvements sweep (branch `improvements`): COMPLETE, awaiting user verification.**
 All five roadmap phases (see `ROADMAP.md`) are implemented on the
 `improvements` branch as granular commits; `main` is untouched. The user
@@ -217,4 +265,5 @@ Carried over from Sessions 1–2 (all still true):
 | 3 | 2026-07-27 | Complete. Collections feature + polish, user-verified in browser. Committed. |
 | 4 | 2026-07-27 | Complete. Collections tab redesign (cards grid + mosaic + detail view), user-verified in browser. Committed. |
 | 5 | 2026-10-04 | Complete. Improvements sweep on `improvements` branch (episodes, schedule, AI, discover redesign, audit). Awaiting user verification, then curated merge. |
+| 6 | 2026-10-05 | Complete. Feature completion pass (polish, filters, provider rail, stats, drawer redesign). Awaiting user verification, then curated merge. |
 

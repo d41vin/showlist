@@ -39,9 +39,9 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
   const [failed, setFailed] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
   // Title lists keyed by provider id; loading is derived.
-  const [titlesByKey, setTitlesByKey] = useState<
-    Record<number, MediaItem[]>
-  >({})
+  const [titlesByKey, setTitlesByKey] = useState<Record<number, MediaItem[]>>(
+    {}
+  )
   const [failedKeys, setFailedKeys] = useState<Set<number>>(new Set())
 
   useEffect(() => {
@@ -157,7 +157,9 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                 aria-pressed={selected === provider.id}
                 aria-label={provider.name}
                 onClick={() =>
-                  setSelected((prev) => (prev === provider.id ? null : provider.id))
+                  setSelected((prev) =>
+                    prev === provider.id ? null : provider.id
+                  )
                 }
                 className={cn(
                   "flex h-14 w-24 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-muted p-2.5 transition-all",
@@ -223,7 +225,6 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
           )}
         </div>
       )}
-
     </section>
   )
 }

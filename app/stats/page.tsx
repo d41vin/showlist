@@ -47,10 +47,7 @@ export default function StatsPage() {
 function StatsContent() {
   const { isAuthenticated } = useConvexAuth()
   const myItems = useQuery(api.items.listMine, isAuthenticated ? {} : "skip")
-  const watches = useQuery(
-    api.episodes.listMine,
-    isAuthenticated ? {} : "skip"
-  )
+  const watches = useQuery(api.episodes.listMine, isAuthenticated ? {} : "skip")
   const statsGet = useAction(api.stats.get)
 
   const [watchTime, setWatchTime] = useState<WatchTime | null>(null)
@@ -226,8 +223,8 @@ function StatsContent() {
 
           <p className="text-xs text-muted-foreground">
             Estimates use TMDB runtimes for movies you marked watched and
-            episodes you ticked. Ticks are personal accounting — they don&rsquo;t
-            change any list statuses.
+            episodes you ticked. Ticks are personal accounting — they
+            don&rsquo;t change any list statuses.
           </p>
         </div>
       )}
@@ -249,7 +246,7 @@ function Stat({
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <p
-        className={`font-semibold tabular-nums tracking-tight ${
+        className={`font-semibold tracking-tight tabular-nums ${
           big ? "text-4xl" : "text-3xl"
         }`}
       >

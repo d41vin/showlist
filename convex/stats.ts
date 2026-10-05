@@ -19,9 +19,7 @@ type CacheEntry = { payload: unknown; fetchedAt: number }
 export const get = action({
   args: {
     movieIds: v.array(v.number()),
-    tvSeasons: v.array(
-      v.object({ tmdbId: v.number(), season: v.number() })
-    ),
+    tvSeasons: v.array(v.object({ tmdbId: v.number(), season: v.number() })),
   },
   returns: v.object({
     movieMinutes: v.number(),

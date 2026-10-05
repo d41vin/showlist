@@ -17,8 +17,8 @@ must deploy clean.
 |---|------|---------|----------|--------|
 | 1 | tests | No automated tests for episode tracking, cleanup rule, schedule windows | High | **Done 2026-10-04** |
 | 2 | performance | `tmdbCache` table grows unbounded (no eviction) | Medium | **Done 2026-10-04** |
-| 3 | ux | Schedule silently caps at 200 shows | Medium | Open |
-| 4 | robustness | `episodes.setSeason` bulk insert has no transaction-limit guard | Low | Open |
+| 3 | ux | Schedule silently caps at 200 shows | Medium | **Done 2026-10-05** |
+| 4 | robustness | `episodes.setSeason` bulk insert has no transaction-limit guard | Low | **Done 2026-10-05** |
 | 5 | security | AI key in localStorage is readable by any XSS | Low (inherent to BYOK-in-browser) | Open (direction) |
 | 6 | tech-debt | `lib/media.ts` mixes URLs, dates and domain types | Low | Open |
 
@@ -48,7 +48,16 @@ deleting `tmdbCache` entries older than 30 days by `_creationTime` in
 batch fills. Eviction is correctness-neutral (a refreshed-but-old entry
 just refetches on next read).
 
-## Plan 3 — Surface the schedule 200-show cap
+## Plan 3 — Surface the schedule 200-show cap ✅
+
+Implemented 2026-10-05: schedule.get returns `{entries, truncated}`; the
+schedule tab shows a note when the cap was hit.
+
+## Plan 4 — setSeason transaction guard ✅
+
+Implemented 2026-10-05: setSeason throws a clear error for >2000 episodes.
+
+## Plan 5 — AI key strictness option (direction)
 
 **Context.** `schedule.get` slices input ids to 200 (`convex/schedule.ts`).
 A user with more TV shows sees a silently partial schedule.

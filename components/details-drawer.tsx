@@ -297,7 +297,7 @@ function DrawerDetails({ data }: { data: ShowDetails }) {
   return (
     <div className="flex flex-col gap-2">
       {data.tagline !== null && (
-        <p className="italic text-muted-foreground">{data.tagline}</p>
+        <p className="text-muted-foreground italic">{data.tagline}</p>
       )}
       {data.overview !== null && data.overview !== "" ? (
         <p className="text-[15px] leading-relaxed">{data.overview}</p>
@@ -360,7 +360,7 @@ function MoreLikeThis({
   }
   return (
     <div className="border-t px-6 py-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
         More like this
       </h3>
       <div className="hide-scrollbar -mx-6 mt-3 flex gap-2.5 overflow-x-auto px-6 pb-1">

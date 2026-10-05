@@ -112,10 +112,10 @@ export function EpisodesSection({
   return (
     <div className="border-t px-6 py-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
           Episodes
         </h3>
-        <span className="text-xs tabular-nums text-muted-foreground">
+        <span className="text-xs text-muted-foreground tabular-nums">
           {episodes.length > 0 ? `${watchedCount}/${episodes.length}` : ""}
         </span>
       </div>

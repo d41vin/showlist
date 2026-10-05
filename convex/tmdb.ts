@@ -97,12 +97,9 @@ export const watchProviders = action({
       .map((r: Record<string, unknown>) => ({
         id: typeof r.provider_id === "number" ? r.provider_id : -1,
         name: typeof r.provider_name === "string" ? r.provider_name : "",
-        logoPath:
-          typeof r.logo_path === "string" ? r.logo_path : null,
+        logoPath: typeof r.logo_path === "string" ? r.logo_path : null,
       }))
-      .filter(
-        (r) => r.id >= 0 && r.name !== "" && r.logoPath !== null
-      )
+      .filter((r) => r.id >= 0 && r.name !== "" && r.logoPath !== null)
       .slice(0, 40)
 
     await ctx.runMutation(internal.tmdb_cache.putBatch, {
