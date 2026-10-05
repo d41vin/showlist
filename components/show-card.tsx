@@ -27,12 +27,16 @@ function isInLayer(target: EventTarget | null) {
 export function ShowCard({
   item,
   state,
+  stateByKey,
   collections,
   overlayOpen,
   onOverlayOpenChange,
 }: {
   item: MediaItem
   state: ItemState | undefined
+  // Passed through to the details drawer so drill-down items resolve their
+  // real saved state.
+  stateByKey?: Map<string, ItemState>
   collections: CollectionSummary[]
   overlayOpen: boolean
   onOverlayOpenChange: (open: boolean) => void
@@ -108,7 +112,12 @@ export function ShowCard({
             |
           </span>
           <span>{item.year ?? "—"}</span>
-          <DetailsDrawer item={item} state={state} collections={collections} />
+          <DetailsDrawer
+            item={item}
+            state={state}
+            stateByKey={stateByKey}
+            collections={collections}
+          />
         </div>
       </div>
     </div>

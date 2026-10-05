@@ -89,6 +89,7 @@ function DiscoverContent() {
       <ShowCard
         item={item}
         state={stateByKey.get(key)}
+        stateByKey={stateByKey}
         collections={collections}
         overlayOpen={activeCardKey === key}
         onOverlayOpenChange={(open) => setActiveCardKey(open ? key : null)}

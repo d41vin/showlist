@@ -118,6 +118,7 @@ export function AiDescribe({
               <ShowCard
                 item={row.item}
                 state={gridState.stateByKey.get(row.key)}
+                stateByKey={gridState.stateByKey}
                 collections={gridState.collections}
                 overlayOpen={gridState.activeCardKey === row.key}
                 onOverlayOpenChange={(open) =>

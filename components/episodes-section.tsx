@@ -1,6 +1,10 @@
 "use client"
 
-import { CheckIcon, ImageNotFound01Icon } from "@hugeicons/core-free-icons"
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ImageNotFound01Icon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction, useMutation, useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
@@ -12,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
 import { localTodayISO, tmdbStillUrl, type MediaItem } from "@/lib/media"
+import { cn } from "@/lib/utils"
 
 type ShowDetails = FunctionReturnType<typeof api.tmdb.details>
 type SeasonEpisodes = FunctionReturnType<typeof api.tmdb.tvSeason>
@@ -212,45 +217,73 @@ function EpisodeRow({
   watched: boolean
   onToggle: () => void
 }) {
+  const [expanded, setExpanded] = useState(false)
   const aired = episode.airDate === null || episode.airDate <= localTodayISO()
+  const hasOverview =
+    episode.overview !== null && episode.overview.trim() !== ""
   return (
-    <label
-      className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-1.5 hover:bg-accent/50 ${
+    <div
+      className={`rounded-lg px-1 py-1.5 hover:bg-accent/50 ${
         aired ? "" : "opacity-60"
       }`}
     >
-      <Checkbox
-        checked={watched}
-        onCheckedChange={() => onToggle()}
-        aria-label={`Mark S${season}E${episode.episode} ${
-          watched ? "unwatched" : "watched"
-        }`}
-      />
-      {episode.stillPath ? (
-        <Image
-          src={tmdbStillUrl(episode.stillPath)}
-          alt=""
-          width={72}
-          height={40}
-          sizes="72px"
-          className="aspect-video w-18 shrink-0 rounded-md object-cover"
+      <div className="flex items-center gap-2.5">
+        <Checkbox
+          checked={watched}
+          onCheckedChange={() => onToggle()}
+          aria-label={`Mark S${season}E${episode.episode} ${
+            watched ? "unwatched" : "watched"
+          }`}
         />
-      ) : (
-        <div className="flex aspect-video w-18 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <HugeiconsIcon icon={ImageNotFound01Icon} className="size-4" />
+        {episode.stillPath ? (
+          <Image
+            src={tmdbStillUrl(episode.stillPath)}
+            alt=""
+            width={72}
+            height={40}
+            sizes="72px"
+            className="aspect-video w-18 shrink-0 rounded-md object-cover"
+          />
+        ) : (
+          <div className="flex aspect-video w-18 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+            <HugeiconsIcon icon={ImageNotFound01Icon} className="size-4" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">
+            {episode.episode}. {episode.name ?? "TBA"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {formatAirDate(episode.airDate)}
+            {episode.runtime !== null ? ` · ${episode.runtime}m` : ""}
+            {!aired ? " · unaired" : ""}
+          </p>
         </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
-          {episode.episode}. {episode.name ?? "TBA"}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {formatAirDate(episode.airDate)}
-          {episode.runtime !== null ? ` · ${episode.runtime}m` : ""}
-          {!aired ? " · unaired" : ""}
-        </p>
+        {hasOverview && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="-mr-1 text-muted-foreground"
+            aria-expanded={expanded}
+            aria-label={`Synopsis for S${season}E${episode.episode}`}
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            <HugeiconsIcon
+              icon={ChevronDownIcon}
+              className={cn(
+                "transition-transform",
+                expanded && "rotate-180"
+              )}
+            />
+          </Button>
+        )}
       </div>
-    </label>
+      {expanded && hasOverview && (
+        <p className="mt-1.5 pl-14 pr-8 text-xs leading-relaxed text-muted-foreground">
+          {episode.overview}
+        </p>
+      )}
+    </div>
   )
 }
 

@@ -146,6 +146,7 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
               <ShowCard
                 item={row.item}
                 state={stateByKey.get(row.key)}
+                stateByKey={stateByKey}
                 collections={collections}
                 overlayOpen={activeCardKey === row.key}
                 onOverlayOpenChange={(open) =>

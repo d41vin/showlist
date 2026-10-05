@@ -384,6 +384,7 @@ function CardGrid({
             key={key}
             item={item}
             state={stateByKey.get(key)}
+            stateByKey={stateByKey}
             collections={collections}
             overlayOpen={activeCardKey === key}
             onOverlayOpenChange={(open) =>

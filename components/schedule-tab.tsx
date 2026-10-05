@@ -265,6 +265,7 @@ function ScheduleSection({
               row={row}
               onToggle={onToggle}
               state={stateByKey.get(`${row.item.mediaType}:${row.item.tmdbId}`)}
+              stateByKey={stateByKey}
               collections={collections}
             />
           ))}
@@ -321,11 +322,13 @@ function ScheduleRow({
   row,
   onToggle,
   state,
+  stateByKey,
   collections,
 }: {
   row: Row
   onToggle: (row: Row) => void
   state: ItemState | undefined
+  stateByKey: Map<string, ItemState>
   collections: CollectionSummary[]
 }) {
   return (
@@ -358,7 +361,12 @@ function ScheduleRow({
           row.watched ? "unwatched" : "watched"
         }`}
       />
-      <DetailsDrawer item={row.item} state={state} collections={collections} />
+      <DetailsDrawer
+        item={row.item}
+        state={state}
+        stateByKey={stateByKey}
+        collections={collections}
+      />
     </div>
   )
 }

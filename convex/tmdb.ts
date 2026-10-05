@@ -54,6 +54,7 @@ export const seasonEpisodesValidator = v.object({
 // schedule re-reads the same entries with its own freshness rule.
 const DETAILS_TTL_MS = 12 * 60 * 60 * 1000
 const SEASON_TTL_MS = 24 * 60 * 60 * 1000
+const RECOMMENDATIONS_TTL_MS = 24 * 60 * 60 * 1000
 
 const detailsValidator = v.object({
   overview: v.union(v.string(), v.null()),
@@ -74,6 +75,7 @@ const detailsValidator = v.object({
 
 type DetailsPayload = Infer<typeof detailsValidator>
 type SeasonEpisodesPayload = Infer<typeof seasonEpisodesValidator>
+type SearchResultPayload = Infer<typeof searchResultValidator>
 // Shape of one entry from tmdb_cache.getBatch; the annotation breaks the
 // TS circularity that runQuery results would otherwise create here.
 type CacheEntry = { payload: unknown; fetchedAt: number }
@@ -319,6 +321,42 @@ export const tvSeason = action({
       entries: [{ key: cacheKey, payload, fetchedAt: Date.now() }],
     })
     return payload
+  },
+})
+
+
+// Native TMDB recommendations for one title — "More like this" in the
+// details drawer. No LLM involved.
+export const recommendations = action({
+  args: { mediaType: mediaTypeValidator, tmdbId: v.number() },
+  returns: v.array(searchResultValidator),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const cacheKey = `recs:${args.mediaType}:${args.tmdbId}:v1`
+    const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
+      keys: [cacheKey],
+    })) as CacheEntry[]
+    if (
+      cached?.payload != null &&
+      Date.now() - cached.fetchedAt < RECOMMENDATIONS_TTL_MS
+    ) {
+      return cached.payload as SearchResultPayload[]
+    }
+
+    const data = await tmdbFetch(
+      `/${args.mediaType}/${args.tmdbId}/recommendations`,
+      { language: "en-US" }
+    )
+    const results = Array.isArray(data.results) ? data.results : []
+    const items = normalizeResults(results, args.mediaType)
+
+    await ctx.runMutation(internal.tmdb_cache.putBatch, {
+      entries: [{ key: cacheKey, payload: items, fetchedAt: Date.now() }],
+    })
+    return items
   },
 })
 
