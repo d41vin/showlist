@@ -1,5 +1,7 @@
 "use client"
 
+import { Download01Icon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction, useConvexAuth, useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { useEffect, useMemo, useState } from "react"
@@ -9,10 +11,31 @@ import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
-import type { Doc } from "@/convex/_generated/dataModel"
+import type { Doc, Id } from "@/convex/_generated/dataModel"
 
 type ItemDoc = Doc<"items">
 type WatchTime = FunctionReturnType<typeof api.stats.get>
+
+// Export helpers — everything is generated in the browser from the reactive
+// queries; nothing passes through a server.
+function downloadFile(name: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = name
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+function csvField(value: string | number | boolean) {
+  const s = String(value)
+  return /[",\n\r]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s
+}
+
+function isoOrNull(ms: number | undefined) {
+  return ms === undefined ? "" : new Date(ms).toISOString()
+}
 
 // The Stats page: counts come reactively from the user's own data (free),
 // estimated watch time comes from TMDB runtimes via the shared cache.
@@ -48,6 +71,14 @@ function StatsContent() {
   const { isAuthenticated } = useConvexAuth()
   const myItems = useQuery(api.items.listMine, isAuthenticated ? {} : "skip")
   const watches = useQuery(api.episodes.listMine, isAuthenticated ? {} : "skip")
+  const myCollections = useQuery(
+    api.collections.listMine,
+    isAuthenticated ? {} : "skip"
+  )
+  const memberships = useQuery(
+    api.collections.listMemberships,
+    isAuthenticated ? {} : "skip"
+  )
   const statsGet = useAction(api.stats.get)
 
   const [watchTime, setWatchTime] = useState<WatchTime | null>(null)
@@ -130,6 +161,101 @@ function StatsContent() {
   }, [myItems, watches])
 
   const loading = myItems === undefined || watches === undefined
+
+  const exportJson = () => {
+    if (
+      myItems === undefined ||
+      watches === undefined ||
+      myCollections === undefined ||
+      memberships === undefined
+    ) {
+      return
+    }
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      items: myItems,
+      collections: (myCollections ?? []).map(({ _id, name }) => ({
+        id: _id,
+        name,
+      })),
+      memberships: memberships ?? [],
+      episodeWatches: watches,
+    }
+    downloadFile(
+      `showlist-export-${new Date().toISOString().slice(0, 10)}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json"
+    )
+  }
+
+  const exportItemsCsv = () => {
+    if (myItems === undefined) {
+      return
+    }
+    const collectionNames = new Map<Id<"collections">, string>()
+    for (const c of myCollections ?? []) {
+      collectionNames.set(c._id, c.name)
+    }
+    const namesByItem = new Map<Id<"items">, string[]>()
+    for (const m of memberships ?? []) {
+      const name = collectionNames.get(m.collectionId)
+      if (name === undefined) continue
+      const list = namesByItem.get(m.itemId) ?? []
+      list.push(name)
+      namesByItem.set(m.itemId, list)
+    }
+    const header = [
+      "tmdbId",
+      "mediaType",
+      "title",
+      "year",
+      "posterPath",
+      "inWatchlist",
+      "watching",
+      "watched",
+      "sentiment",
+      "collections",
+      "watchlistAt",
+      "watchedAt",
+      "watchingAt",
+      "updatedAt",
+    ]
+    const lines = [header.join(",")]
+    for (const item of myItems) {
+      lines.push(
+        [
+          item.tmdbId,
+          item.mediaType,
+          item.title,
+          item.year ?? "",
+          item.posterPath ?? "",
+          item.inWatchlist,
+          item.watching === true,
+          item.watched,
+          item.sentiment ?? "",
+          (namesByItem.get(item._id) ?? []).join("; "),
+          isoOrNull(item.watchlistAt),
+          isoOrNull(item.watchedAt),
+          isoOrNull(item.watchingAt),
+          isoOrNull(item.updatedAt),
+        ]
+          .map(csvField)
+          .join(",")
+      )
+    }
+    downloadFile(
+      `showlist-items-${new Date().toISOString().slice(0, 10)}.csv`,
+      // BOM so Excel reads the UTF-8 titles correctly.
+      `\uFEFF${lines.join("\r\n")}`,
+      "text/csv;charset=utf-8"
+    )
+  }
+
+  const exportReady =
+    myItems !== undefined &&
+    watches !== undefined &&
+    myCollections !== undefined &&
+    memberships !== undefined
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-8">
@@ -219,6 +345,26 @@ function StatsContent() {
                 )
               })()
             )}
+          </section>
+
+          <section>
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Export
+            </h2>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="outline" onClick={exportJson} disabled={!exportReady}>
+                <HugeiconsIcon icon={Download01Icon} />
+                Download JSON
+              </Button>
+              <Button variant="outline" onClick={exportItemsCsv} disabled={!exportReady}>
+                <HugeiconsIcon icon={Download01Icon} />
+                Download items CSV
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              JSON has every item, collection and episode tick; the CSV covers
+              items only. Generated in your browser.
+            </p>
           </section>
 
           <p className="text-xs text-muted-foreground">
