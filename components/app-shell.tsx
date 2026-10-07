@@ -34,6 +34,13 @@ import {
   type MediaTypeFilter,
 } from "@/components/media-type-toggle"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -54,6 +61,18 @@ import { useItemStateMap } from "@/components/use-item-state"
 
 const SEARCH_DEBOUNCE_MS = 400
 
+// Sort order for the library list tabs (shared across the three tabs).
+type ListSort = "added" | "title" | "year"
+
+const LIST_SORT_ITEMS: { value: ListSort; label: string }[] = [
+  { value: "added", label: "Recently added" },
+  { value: "title", label: "Title A–Z" },
+  { value: "year", label: "Year" },
+]
+
+// The tabs the sort/type controls apply to.
+const LIST_TABS = new Set(["watchlist", "watched", "watching"])
+
 export function AppShell() {
   const { isAuthenticated } = useConvexAuth()
   const search = useAction(api.tmdb.search)
@@ -68,6 +87,9 @@ export function AppShell() {
   const [tab, setTab] = useState("watchlist")
   // Type filter chips over search results (client-side).
   const [searchType, setSearchType] = useState<MediaTypeFilter>("all")
+  // Sort + type filter for the library list tabs (shared across tabs).
+  const [listSort, setListSort] = useState<ListSort>("added")
+  const [listType, setListType] = useState<MediaTypeFilter>("all")
   // AI describe mode replaces the search bar and tab area.
   const [aiMode, setAiMode] = useState(false)
   // Which collection the Collections tab is showing (null = cards view;
@@ -215,6 +237,12 @@ export function AppShell() {
     onActiveCardKeyChange: setActiveCardKey,
   }
 
+  // Empty text: the tab's own message unless the type filter hid everything.
+  const emptyMessageFor = (base: string, items: MediaItem[]) =>
+    listType === "all" || items.length === 0
+      ? base
+      : `No ${listType === "movie" ? "movies" : "shows"} in this list.`
+
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
       {aiMode ? (
@@ -296,27 +324,65 @@ export function AppShell() {
                   <TabsTrigger value="schedule">Schedule</TabsTrigger>
                   <TabsTrigger value="collections">Collections</TabsTrigger>
                 </TabsList>
+                {LIST_TABS.has(tab) && (
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    <MediaTypeToggle value={listType} onChange={setListType} />
+                    <Select
+                      items={LIST_SORT_ITEMS}
+                      value={listSort}
+                      onValueChange={(value) => setListSort(value as ListSort)}
+                    >
+                      <SelectTrigger className="w-44" aria-label="Sort order">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LIST_SORT_ITEMS.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <TabsContent value="watchlist" className="mt-6">
                   <CardGrid
-                    items={watchlistItems}
+                    items={applyListControls(
+                      watchlistItems,
+                      listType,
+                      listSort
+                    )}
                     loading={myItems === undefined}
-                    emptyMessage="Nothing on your watchlist yet — search for something you want to watch."
+                    emptyMessage={emptyMessageFor(
+                      "Nothing on your watchlist yet — search for something you want to watch.",
+                      watchlistItems
+                    )}
                     {...gridProps}
                   />
                 </TabsContent>
                 <TabsContent value="watched" className="mt-6">
                   <CardGrid
-                    items={watchedItems}
+                    items={applyListControls(watchedItems, listType, listSort)}
                     loading={myItems === undefined}
-                    emptyMessage="Nothing marked as watched yet — toggle Watched on any card."
+                    emptyMessage={emptyMessageFor(
+                      "Nothing marked as watched yet — toggle Watched on any card.",
+                      watchedItems
+                    )}
                     {...gridProps}
                   />
                 </TabsContent>
                 <TabsContent value="watching" className="mt-6">
                   <CardGrid
-                    items={watchingItems}
+                    items={applyListControls(
+                      watchingItems,
+                      listType,
+                      listSort
+                    )}
                     loading={myItems === undefined}
-                    emptyMessage="Nothing in progress yet — toggle Watching on any card."
+                    emptyMessage={emptyMessageFor(
+                      "Nothing in progress yet — toggle Watching on any card.",
+                      watchingItems
+                    )}
                     {...gridProps}
                   />
                 </TabsContent>
@@ -407,6 +473,27 @@ function sortByAddedAt<T extends { _creationTime: number }>(
 ) {
   return items.sort(
     (a, b) => (addedAt(b) ?? b._creationTime) - (addedAt(a) ?? a._creationTime)
+  )
+}
+
+// Type filter + sort shared by the library list tabs. "added" keeps the
+// caller's order (sortByAddedAt per tab); title sorts A–Z; year sorts
+// newest first with titles as tiebreak (missing years last).
+function applyListControls<T extends MediaItem>(
+  items: T[],
+  type: MediaTypeFilter,
+  sort: ListSort
+): T[] {
+  const filtered =
+    type === "all" ? items : items.filter((i) => i.mediaType === type)
+  if (sort === "added") {
+    return filtered
+  }
+  return [...filtered].sort((a, b) =>
+    sort === "title"
+      ? a.title.localeCompare(b.title)
+      : (b.year ?? "").localeCompare(a.year ?? "") ||
+        a.title.localeCompare(b.title)
   )
 }
 
