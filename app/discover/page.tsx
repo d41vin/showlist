@@ -4,7 +4,7 @@ import { Search01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
 import { useAction, useConvexAuth } from "convex/react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { AiForYou } from "@/components/ai-for-you"
 import { DiscoverHero } from "@/components/discover-hero"
@@ -41,6 +41,38 @@ type Category = "trending" | "popular" | "top-rated" | "in-theaters"
 type RowData = {
   title: string
   items: MediaItem[]
+}
+
+// One merged genre option — the union of the movie and TV genre lists by
+// name. TMDB genre ids differ per type (and some names exist on only one
+// side), so each option carries the id it maps to per type.
+type GenreOption = {
+  value: string
+  label: string
+  movieId: number | null
+  tvId: number | null
+}
+
+// Per-type browse state: one page cursor + accumulation per media type, so
+// the merged ("all") grid can load more from both discover queries.
+type BrowseList = { items: MediaItem[]; page: number; hasMore: boolean }
+type BrowseStore = {
+  key: string
+  lists: Partial<Record<"movie" | "tv", BrowseList>>
+}
+
+// Zip two ranked lists into one merged grid — movie, tv, movie, tv, …
+function interleave(a: MediaItem[], b: MediaItem[]): MediaItem[] {
+  const out: MediaItem[] = []
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (i < a.length) {
+      out.push(a[i])
+    }
+    if (i < b.length) {
+      out.push(b[i])
+    }
+  }
+  return out
 }
 
 export default function DiscoverPage() {
@@ -122,18 +154,14 @@ function DiscoverContent() {
 
   // Browse-by-genre state (null genre = curated rows mode). Results are
   // stored keyed by their filter combo so changing filters derives the
-  // loading state instead of resetting it in an effect.
-  const [genre, setGenre] = useState<number | null>(null)
+  // loading state instead of resetting it in an effect. With type "all" a
+  // picked genre runs both per-type discover queries into one grid.
+  const [genreName, setGenreName] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<"popularity" | "rating" | "newest">(
     "popularity"
   )
-  const [genreList, setGenreList] = useState<{ id: number; name: string }[]>([])
-  const [browseStore, setBrowseStore] = useState<{
-    key: string
-    items: MediaItem[]
-    page: number
-    hasMore: boolean
-  } | null>(null)
+  const [genreOptions, setGenreOptions] = useState<GenreOption[]>([])
+  const [browseStore, setBrowseStore] = useState<BrowseStore | null>(null)
   const [browseFailed, setBrowseFailed] = useState<string | null>(null)
   const [loadingMoreBrowse, setLoadingMoreBrowse] = useState(false)
   const requestIdRef = useRef(0)
@@ -256,33 +284,93 @@ function DiscoverContent() {
     discoverNowPlaying,
   ])
 
-  const browseType = mediaType === "all" ? "movie" : mediaType
   const browseKey =
-    genre === null || searchActive ? null : `${browseType}:${genre}:${sortBy}`
+    genreName === null || searchActive
+      ? null
+      : `${mediaType}:${genreName}:${sortBy}`
   const currentBrowse =
     browseStore !== null && browseStore.key === browseKey ? browseStore : null
   const browseLoading =
     browseKey !== null && currentBrowse === null && browseFailed !== browseKey
 
-  // Genre options for the selected type ("all" browses movies by default —
-  // picking a genre flips the type toggle to Movies).
+  // The grid's items: interleaved movie+TV in merged mode, the single type's
+  // list otherwise.
+  const browseItems = useMemo(() => {
+    if (currentBrowse === null) {
+      return null
+    }
+    if (mediaType === "all") {
+      return interleave(
+        currentBrowse.lists.movie?.items ?? [],
+        currentBrowse.lists.tv?.items ?? []
+      )
+    }
+    return currentBrowse.lists[mediaType]?.items ?? []
+  }, [currentBrowse, mediaType])
+  const browseHasMore =
+    currentBrowse !== null &&
+    Object.values(currentBrowse.lists).some((s) => s?.hasMore ?? false)
+
+  // Genre options for the selected type; "all" merges both TMDB genre lists
+  // by name so one browse grid can interleave the two discover queries.
   useEffect(() => {
     let cancelled = false
-    genresAction({ mediaType: browseType })
-      .then((list) => {
-        if (!cancelled) {
-          setGenreList(list)
+    const load = async () => {
+      try {
+        if (mediaType === "all") {
+          const [movies, tv] = await Promise.all([
+            genresAction({ mediaType: "movie" }),
+            genresAction({ mediaType: "tv" }),
+          ])
+          const byName = new Map<string, GenreOption>()
+          for (const g of movies) {
+            byName.set(g.name, {
+              value: g.name,
+              label: g.name,
+              movieId: g.id,
+              tvId: null,
+            })
+          }
+          for (const g of tv) {
+            const existing = byName.get(g.name)
+            if (existing !== undefined) {
+              existing.tvId = g.id
+            } else {
+              byName.set(g.name, {
+                value: g.name,
+                label: g.name,
+                movieId: null,
+                tvId: g.id,
+              })
+            }
+          }
+          if (!cancelled) {
+            setGenreOptions([...byName.values()])
+          }
+        } else {
+          const list = await genresAction({ mediaType })
+          if (!cancelled) {
+            setGenreOptions(
+              list.map((g) => ({
+                value: g.name,
+                label: g.name,
+                movieId: mediaType === "movie" ? g.id : null,
+                tvId: mediaType === "tv" ? g.id : null,
+              }))
+            )
+          }
         }
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) {
-          setGenreList([])
+          setGenreOptions([])
         }
-      })
+      }
+    }
+    void load()
     return () => {
       cancelled = true
     }
-  }, [browseType, genresAction])
+  }, [mediaType, genresAction])
 
   useEffect(() => {
     if (
@@ -292,30 +380,49 @@ function DiscoverContent() {
     ) {
       return
     }
-    if (genre === null) {
+    if (genreName === null) {
       return
     }
+    const option = genreOptions.find((g) => g.value === genreName)
+    if (option === undefined) {
+      return
+    }
+    // Genre ids differ per type; in merged mode only the types that have
+    // this genre get queried.
+    const targets = [
+      ...(option.movieId !== null
+        ? [{ type: "movie" as const, id: option.movieId }]
+        : []),
+      ...(option.tvId !== null
+        ? [{ type: "tv" as const, id: option.tvId }]
+        : []),
+    ]
     let cancelled = false
-    discoverByFilters({
-      mediaType: browseType,
-      genre,
-      sort: sortBy,
-    })
-      .then((result) => {
-        if (!cancelled) {
-          setBrowseStore({
-            key: browseKey,
-            items: result.items,
+    const load = async () => {
+      try {
+        const results = await Promise.all(
+          targets.map(({ type, id }) =>
+            discoverByFilters({ mediaType: type, genre: id, sort: sortBy })
+          )
+        )
+        const lists: BrowseStore["lists"] = {}
+        targets.forEach(({ type }, i) => {
+          lists[type] = {
+            items: results[i].items,
             page: 1,
-            hasMore: result.hasMore,
-          })
+            hasMore: results[i].hasMore,
+          }
+        })
+        if (!cancelled) {
+          setBrowseStore({ key: browseKey, lists })
         }
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) {
           setBrowseFailed(browseKey)
         }
-      })
+      }
+    }
+    void load()
     return () => {
       cancelled = true
     }
@@ -323,8 +430,8 @@ function DiscoverContent() {
     browseKey,
     browseStore,
     browseFailed,
-    genre,
-    browseType,
+    genreName,
+    genreOptions,
     sortBy,
     searchActive,
     discoverByFilters,
@@ -334,30 +441,52 @@ function DiscoverContent() {
     if (
       browseKey === null ||
       currentBrowse === null ||
-      !currentBrowse.hasMore ||
       loadingMoreBrowse ||
-      genre === null
+      genreName === null
     ) {
+      return
+    }
+    const option = genreOptions.find((g) => g.value === genreName)
+    if (option === undefined) {
+      return
+    }
+    const extendTypes =
+      mediaType === "all"
+        ? (["movie", "tv"] as const).filter(
+            (t) => currentBrowse.lists[t]?.hasMore ?? false
+          )
+        : currentBrowse.lists[mediaType]?.hasMore
+          ? [mediaType]
+          : []
+    if (extendTypes.length === 0) {
       return
     }
     setLoadingMoreBrowse(true)
     try {
-      const result = await discoverByFilters({
-        mediaType: browseType,
-        genre,
-        sort: sortBy,
-        page: currentBrowse.page + 1,
-      })
-      const seen = new Set(currentBrowse.items.map(mediaKey))
-      setBrowseStore({
-        key: browseKey,
-        items: [
-          ...currentBrowse.items,
-          ...result.items.filter((item) => !seen.has(mediaKey(item))),
-        ],
-        page: currentBrowse.page + 1,
-        hasMore: result.hasMore,
-      })
+      const lists: BrowseStore["lists"] = { ...currentBrowse.lists }
+      for (const type of extendTypes) {
+        const id = type === "movie" ? option.movieId : option.tvId
+        const state = currentBrowse.lists[type]
+        if (id === null || state === undefined) {
+          continue
+        }
+        const result = await discoverByFilters({
+          mediaType: type,
+          genre: id,
+          sort: sortBy,
+          page: state.page + 1,
+        })
+        const seen = new Set(state.items.map(mediaKey))
+        lists[type] = {
+          items: [
+            ...state.items,
+            ...result.items.filter((item) => !seen.has(mediaKey(item))),
+          ],
+          page: state.page + 1,
+          hasMore: result.hasMore,
+        }
+      }
+      setBrowseStore({ key: browseKey, lists })
     } catch {
       // Keep the grid; the button stays for a retry.
     } finally {
@@ -374,7 +503,7 @@ function DiscoverContent() {
 
   const genreSelectItems = [
     { value: "all", label: "All genres" },
-    ...genreList.map((g) => ({ value: String(g.id), label: g.name })),
+    ...genreOptions.map((g) => ({ value: g.value, label: g.label })),
   ]
   const sortSelectItems = [
     { value: "popularity", label: "Most popular" },
@@ -389,7 +518,7 @@ function DiscoverContent() {
     !searchActive &&
     !loading &&
     !error &&
-    genre === null &&
+    genreName === null &&
     category === "trending" &&
     rows[0]?.items[0] !== undefined
       ? rows[0].items[0]
@@ -481,7 +610,7 @@ function DiscoverContent() {
                 value={mediaType}
                 onChange={(next) => {
                   // Genre ids differ between movies and TV.
-                  setGenre(null)
+                  setGenreName(null)
                   setMediaType(next)
                 }}
               />
@@ -491,17 +620,12 @@ function DiscoverContent() {
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               <Select
                 items={genreSelectItems}
-                value={genre === null ? "all" : String(genre)}
+                value={genreName === null ? "all" : genreName}
                 onValueChange={(value) => {
                   const v = String(value)
-                  if (v === "all") {
-                    setGenre(null)
-                    return
-                  }
-                  if (mediaType === "all") {
-                    setMediaType("movie")
-                  }
-                  setGenre(Number(v))
+                  // In merged ("all") mode the grid interleaves both types'
+                  // queries for the picked genre — no auto-flip to Movies.
+                  setGenreName(v === "all" ? null : v)
                 }}
               >
                 <SelectTrigger className="w-44" aria-label="Genre">
@@ -515,7 +639,7 @@ function DiscoverContent() {
                   ))}
                 </SelectContent>
               </Select>
-              {genre !== null && (
+              {genreName !== null && (
                 <Select
                   items={sortSelectItems}
                   value={sortBy}
@@ -538,10 +662,10 @@ function DiscoverContent() {
             </div>
 
             <div className="mt-6 flex flex-col gap-6">
-              {isAuthenticated && !error && !loading && genre === null && (
+              {isAuthenticated && !error && !loading && genreName === null && (
                 <AiForYou isAuthenticated={isAuthenticated} />
               )}
-              {genre !== null ? (
+              {genreName !== null ? (
                 browseFailed === browseKey ? (
                   <p className="py-16 text-center text-sm text-muted-foreground">
                     Something went wrong loading results. Try again.
@@ -556,16 +680,16 @@ function DiscoverContent() {
                       </div>
                     ))}
                   </div>
-                ) : currentBrowse !== null && currentBrowse.items.length > 0 ? (
+                ) : browseItems !== null && browseItems.length > 0 ? (
                   <>
                     <div className={GRID_CLASS}>
-                      {currentBrowse.items.map((item) => (
+                      {browseItems.map((item) => (
                         <div key={`${item.mediaType}:${item.tmdbId}`}>
                           {renderCard(item)}
                         </div>
                       ))}
                     </div>
-                    {currentBrowse.hasMore && (
+                    {browseHasMore && (
                       <div className="flex justify-center">
                         <Button
                           variant="outline"
@@ -577,7 +701,7 @@ function DiscoverContent() {
                       </div>
                     )}
                   </>
-                ) : currentBrowse !== null ? (
+                ) : browseItems !== null ? (
                   <p className="py-16 text-center text-sm text-muted-foreground">
                     Nothing found for that genre and sort — try another
                     combination.
