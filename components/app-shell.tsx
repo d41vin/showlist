@@ -23,6 +23,7 @@ import {
 } from "@/components/collection-admin-dialogs"
 import { ContinueWatching } from "@/components/continue-watching"
 import { CreateCollectionDialog } from "@/components/create-collection-dialog"
+import { MediaRow } from "@/components/media-row"
 import { ScheduleTab } from "@/components/schedule-tab"
 import { ShowCard } from "@/components/show-card"
 import { Button } from "@/components/ui/button"
@@ -230,6 +231,30 @@ export function AppShell() {
   const currentError = errorQuery === trimmedQuery
   const searching = searchActive && currentResults === null && !currentError
 
+  // Titles already in the user's lists matching the query — shown as a row
+  // above the TMDB results so a search also surfaces what you already track.
+  const libraryMatches = useMemo(() => {
+    if (!searchActive || myItems === undefined) {
+      return []
+    }
+    const q = trimmedQuery.toLowerCase()
+    return myItems.filter((item) => item.title.toLowerCase().includes(q))
+  }, [searchActive, myItems, trimmedQuery])
+
+  const renderLibraryCard = (item: MediaItem) => {
+    const key = mediaKey(item)
+    return (
+      <ShowCard
+        item={item}
+        state={stateByKey.get(key)}
+        stateByKey={stateByKey}
+        collections={collections}
+        overlayOpen={activeCardKey === key}
+        onOverlayOpenChange={(open) => setActiveCardKey(open ? key : null)}
+      />
+    )
+  }
+
   const gridProps = {
     stateByKey,
     collections,
@@ -290,6 +315,16 @@ export function AppShell() {
             )}
             {searchActive ? (
               <>
+                {libraryMatches.length > 0 && (
+                  <div className="mb-8">
+                    <MediaRow
+                      title="In your library"
+                      items={libraryMatches}
+                      loading={false}
+                      renderCard={renderLibraryCard}
+                    />
+                  </div>
+                )}
                 <div className="mb-6 flex justify-center">
                   <MediaTypeToggle
                     value={searchType}
