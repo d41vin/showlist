@@ -31,6 +31,7 @@ export function ShowCard({
   collections,
   overlayOpen,
   onOverlayOpenChange,
+  badge,
 }: {
   item: MediaItem
   state: ItemState | undefined
@@ -40,6 +41,8 @@ export function ShowCard({
   collections: CollectionSummary[]
   overlayOpen: boolean
   onOverlayOpenChange: (open: boolean) => void
+  // Optional status chip on the poster (e.g. "New episode" on rail cards).
+  badge?: string
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -91,6 +94,11 @@ export function ShowCard({
           <div className="flex h-full items-center justify-center text-muted-foreground">
             <HugeiconsIcon icon={ImageNotFound01Icon} className="size-8" />
           </div>
+        )}
+        {badge && (
+          <span className="absolute top-1.5 left-1.5 rounded-full bg-background/85 px-2 py-0.5 text-[11px] font-medium backdrop-blur">
+            {badge}
+          </span>
         )}
         {/* Action overlay: hover-revealed on desktop, persistent when opened. */}
         <div

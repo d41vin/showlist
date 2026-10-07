@@ -5,13 +5,17 @@ import type { FunctionReturnType } from "convex/server"
 import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 
+import { Button } from "@/components/ui/button"
 import { ShowCard } from "@/components/show-card"
 import type { CardGridState } from "@/components/use-item-state"
 import { api } from "@/convex/_generated/api"
-import { mediaKey, type MediaItem } from "@/lib/media"
+import { localTodayISO, mediaKey, type MediaItem } from "@/lib/media"
 import { cn } from "@/lib/utils"
 
 type Providers = FunctionReturnType<typeof api.tmdb.watchProviders>
+type ScheduleEntry = FunctionReturnType<
+  typeof api.schedule.get
+>["entries"][number]
 
 // Curated rail order — the big services first, then whatever else TMDB
 // returns for the region. Unknown services keep their alphabetical spot.
@@ -28,21 +32,45 @@ const FEATURED_ORDER = [
   "Crunchyroll",
 ]
 
+// "New season" when a season premiere is in play (upcoming in the next 30
+// days or aired within the last 8), "New episode" for any other airing
+// activity — both derived from the same schedule computation the Schedule
+// tab uses, over the shared tmdbCache.
+function badgeFor(entry: ScheduleEntry): string | null {
+  const next = entry.upcoming[0]
+  if (
+    (next !== undefined && next.episode === 1) ||
+    (entry.lastEpisode !== null && entry.lastEpisode.episode === 1)
+  ) {
+    return "New season"
+  }
+  if (next !== undefined || entry.lastEpisode !== null) {
+    return "New episode"
+  }
+  return null
+}
+
 // "Only on {service}" — the movy.sx pattern: a rail of provider logo tiles;
-// picking one shows a scrollable rail of popular titles from that service.
-// Availability region is fixed server-side (US).
+// picking one shows a scrollable rail of popular titles from that service,
+// with a Movies/TV toggle. Availability region is fixed server-side (US).
 export function ProviderRail({ gridState }: { gridState: CardGridState }) {
   const providersAction = useAction(api.tmdb.watchProviders)
   const discoverAction = useAction(api.tmdb.discover)
+  const scheduleGet = useAction(api.schedule.get)
 
   const [providers, setProviders] = useState<Providers | null>(null)
   const [failed, setFailed] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
-  // Title lists keyed by provider id; loading is derived.
-  const [titlesByKey, setTitlesByKey] = useState<Record<number, MediaItem[]>>(
+  const [railType, setRailType] = useState<"movie" | "tv">("movie")
+  // Title lists keyed by `${providerId}:${railType}`; loading is derived.
+  const [titlesByKey, setTitlesByKey] = useState<Record<string, MediaItem[]>>(
     {}
   )
-  const [failedKeys, setFailedKeys] = useState<Set<number>>(new Set())
+  const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set())
+  // Airing badges for one TV rail (tmdbId → badge), keyed like titlesByKey.
+  const [badgesByKey, setBadgesByKey] = useState<
+    Record<string, Record<number, string>>
+  >({})
 
   useEffect(() => {
     let cancelled = false
@@ -66,36 +94,86 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
     () => providers?.find((p) => p.id === selected) ?? null,
     [providers, selected]
   )
-  const titles = selected !== null ? (titlesByKey[selected] ?? null) : null
+  const selectedKey = selected !== null ? `${selected}:${railType}` : null
+  const titles = selectedKey !== null ? (titlesByKey[selectedKey] ?? null) : null
 
   useEffect(() => {
-    if (
-      selected === null ||
-      titlesByKey[selected] !== undefined ||
-      failedKeys.has(selected)
-    ) {
+    if (selected === null) {
+      return
+    }
+    const key = `${selected}:${railType}`
+    if (titlesByKey[key] !== undefined || failedKeys.has(key)) {
       return
     }
     let cancelled = false
     discoverAction({
-      mediaType: "movie",
+      mediaType: railType,
       watchProvider: selected,
       sort: "popularity",
     })
       .then((result) => {
         if (!cancelled) {
-          setTitlesByKey((prev) => ({ ...prev, [selected]: result.items }))
+          setTitlesByKey((prev) => ({ ...prev, [key]: result.items }))
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setFailedKeys((prev) => new Set(prev).add(selected))
+          setFailedKeys((prev) => new Set(prev).add(key))
         }
       })
     return () => {
       cancelled = true
     }
-  }, [selected, titlesByKey, failedKeys, discoverAction])
+  }, [selected, railType, titlesByKey, failedKeys, discoverAction])
+
+  // Airing badges for the current TV rail — one schedule call per selection,
+  // cheap because the details all come from the shared cache.
+  const tvIdsKey = useMemo(
+    () =>
+      selectedKey !== null && railType === "tv"
+        ? (titlesByKey[selectedKey] ?? [])
+            .filter((t) => t.mediaType === "tv")
+            .map((t) => t.tmdbId)
+            .join(",")
+        : "",
+    [selectedKey, railType, titlesByKey]
+  )
+
+  useEffect(() => {
+    if (selectedKey === null || tvIdsKey === "") {
+      return
+    }
+    if (badgesByKey[selectedKey] !== undefined) {
+      return
+    }
+    let cancelled = false
+    scheduleGet({
+      tmdbIds: tvIdsKey.split(",").map(Number),
+      today: localTodayISO(),
+    })
+      .then((result) => {
+        if (cancelled) {
+          return
+        }
+        const badges: Record<number, string> = {}
+        for (const entry of result.entries) {
+          const badge = badgeFor(entry)
+          if (badge !== null) {
+            badges[entry.tmdbId] = badge
+          }
+        }
+        setBadgesByKey((prev) => ({ ...prev, [selectedKey]: badges }))
+      })
+      .catch(() => {
+        // Badges are a bonus; a failed lookup just leaves the rail plain.
+        if (!cancelled) {
+          setBadgesByKey((prev) => ({ ...prev, [selectedKey]: {} }))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedKey, tvIdsKey, badgesByKey, scheduleGet])
 
   // Featured services first (in the curated order), rest after. Plain
   // computation over a tiny list — deliberately not a hook so the early
@@ -136,8 +214,20 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
           <p className="mt-0.5 text-[13px] text-muted-foreground">
             {selectedProvider === null
               ? "Pick a service to see what's popular there"
-              : "Popular titles on this streaming service"}
+              : `Popular ${railType === "movie" ? "movies" : "shows"} on this streaming service`}
           </p>
+        </div>
+        <div className="flex shrink-0 gap-1.5">
+          {(["movie", "tv"] as const).map((t) => (
+            <Button
+              key={t}
+              variant={railType === t ? "default" : "secondary"}
+              size="sm"
+              onClick={() => setRailType(t)}
+            >
+              {t === "movie" ? "Movies" : "TV"}
+            </Button>
+          ))}
         </div>
       </div>
 
@@ -183,9 +273,9 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
       </div>
 
       {/* Titles rail for the selected provider */}
-      {selected !== null && (
+      {selected !== null && selectedKey !== null && (
         <div className="mt-5">
-          {failedKeys.has(selected) ? (
+          {failedKeys.has(selectedKey) ? (
             <p className="text-sm text-muted-foreground">
               Couldn&rsquo;t load titles for this service.
             </p>
@@ -217,6 +307,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                       onOverlayOpenChange={(open) =>
                         gridState.onActiveCardKeyChange(open ? key : null)
                       }
+                      badge={badgesByKey[selectedKey]?.[title.tmdbId]}
                     />
                   </div>
                 )
