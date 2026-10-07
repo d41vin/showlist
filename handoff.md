@@ -7,6 +7,69 @@
 
 ## Status
 
+**Session 7 — Seven-feature pass (branch `improvements`): COMPLETE, awaiting user verification.**
+Builds on sessions 5–6; same branch, same verification gates.
+
+## Session 7 summary — Seven-feature pass (2026-10-07)
+
+Seven user-picked features, each its own commit, in the requested order:
+
+1. **Trailers** (`9fc8e69`): new `tmdb.videos` action (`/{type}/{id}/videos`,
+   server-side key, cached as `videos:{type}:{id}:v1`, 24h TTL) that picks
+   ONE best YouTube video server-side (official Trailer → Trailer → Teaser,
+   newest first; null when none). The drawer's action row gains "Play
+   trailer" (only when a trailer exists); pressing it swaps the cinematic
+   hero backdrop for an inline youtube-nocookie embed (autoplay) with a
+   close button. Playback state is keyed by title, so drill-down/close drop
+   out of playback without a reset effect. Failures stay quiet.
+2. **Provider rail upgrades** (`b5ad14f`): Movies/TV toggle for the titles
+   rail (title lists keyed `providerId:type`); "New season"/"New episode"
+   badges on TV rail cards via one `schedule.get` call per rail (shared
+   tmdbCache — cheap). Badge heuristic (documented in provider-rail.tsx):
+   upcoming or last-aired episode is E1 of a season → "New season"; any
+   other airing activity → "New episode". `ShowCard` gained an optional
+   `badge` chip (top-left on the poster).
+3. **Home list sort/filter** (`ecd34cc`): the Watchlist/Watched/Watching
+   tabs share a MediaTypeToggle (type filter) + sort Select (recently
+   added / Title A–Z / Year). "added" keeps each tab's per-status recency
+   order; a filter that hides everything gets its own "No movies/shows in
+   this list." empty message.
+4. **In your library** (`8f08103`): while searching on home, titles already
+   in the user's lists whose names contain the query render as an
+   "In your library" MediaRow above the TMDB results (client-side
+   substring match over `items.listMine`; no backend change).
+5. **Export library** (`63116ff`): Export section on /stats — Download JSON
+   (items + collections {id,name} + memberships + episode watches) and
+   Download items CSV (14 columns incl. collection names, ISO timestamps,
+   UTF-8 BOM for Excel), all generated client-side from the reactive
+   queries (Blob + anchor download).
+6. **Season mini-posters** (`c8d3df3`): the drawer's Episodes season chips
+   show the season poster thumb from `data.seasons[].posterPath` before
+   the label; chips without a poster keep the label-only look.
+7. **Merged genre browse** (`c9eb379`): Discover with type "all" + a picked
+   genre now runs BOTH discover queries (per-type genre ids resolved from a
+   name-merged union of the movie+TV genre lists) and interleaves one grid
+   (movie, tv, movie, …) with per-type "Load more" pagination — the
+   auto-flip to Movies is gone. Genre select stores the genre NAME; ids are
+   resolved per type at fetch time, so TV-only genres work in merged mode.
+
+**Verified:** typecheck, lint, 13 vitest tests, build, convex deploys all
+clean; `tmdb.videos` (movie + tv) and a TV-only-genre discover (id 10765)
+smoke-tested via `npx convex run` with mock identity. Signed-in UI awaits
+user testing.
+
+**Decisions made mid-build**
+
+- Trailer: single best video chosen server-side (no multi-trailer picker).
+- Badge heuristic is premiere-based and state-blind (episode ticks are
+  personal accounting — a watched show still gets badges when it airs).
+- Merged genre list = movie list first, TV-only names appended; names that
+  exist on both sides carry both ids.
+- Export JSON keeps full item docs (incl. userId tokenIdentifier) — it's
+  the user's own data, generated in their browser.
+
+## Previous status
+
 **Session 6 — Feature completion pass (branch `improvements`): COMPLETE, awaiting user verification.**
 Builds on session 5; same branch, same verification gates.
 
@@ -266,4 +329,5 @@ Carried over from Sessions 1–2 (all still true):
 | 4 | 2026-07-27 | Complete. Collections tab redesign (cards grid + mosaic + detail view), user-verified in browser. Committed. |
 | 5 | 2026-10-04 | Complete. Improvements sweep on `improvements` branch (episodes, schedule, AI, discover redesign, audit). Awaiting user verification, then curated merge. |
 | 6 | 2026-10-05 | Complete. Feature completion pass (polish, filters, provider rail, stats, drawer redesign). Awaiting user verification, then curated merge. |
+| 7 | 2026-10-07 | Complete. Seven-feature pass (trailers, rail toggle+badges, list sort/filter, in-library row, export, season posters, merged genre browse). Awaiting user verification, then curated merge. |
 

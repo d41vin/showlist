@@ -6,6 +6,10 @@
 > log at the end.
 >
 > **Status (2026-10-04): all five phases shipped on this branch.**
+> **Addendum (2026-10-07): session 7 shipped seven user-picked follow-up
+> features (trailers, rail toggle + airing badges, list sort/filter,
+> in-library row, library export, season posters, merged genre browse) —
+> see `handoff.md` session 7.**
 > Findings deliberately left for later live in `plans/README.md`.
 
 ## Vision
