@@ -55,6 +55,7 @@ export const seasonEpisodesValidator = v.object({
 const DETAILS_TTL_MS = 12 * 60 * 60 * 1000
 const SEASON_TTL_MS = 24 * 60 * 60 * 1000
 const RECOMMENDATIONS_TTL_MS = 24 * 60 * 60 * 1000
+const VIDEOS_TTL_MS = 24 * 60 * 60 * 1000
 const GENRES_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const WATCH_PROVIDERS_TTL_MS = 30 * 24 * 60 * 60 * 1000
 // Watch-provider availability region for the Discover "Only on" section.
@@ -413,8 +414,68 @@ export const recommendations = action({
   },
 })
 
-const genreValidator = v.object({ id: v.number(), name: v.string() })
+// Best YouTube trailer for one title — "Play trailer" in the details
+// drawer. Ranking happens server-side so the client gets one answer.
+export const videos = action({
+  args: { mediaType: mediaTypeValidator, tmdbId: v.number() },
+  returns: v.union(v.object({ key: v.string(), name: v.string() }), v.null()),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    const cacheKey = `videos:${args.mediaType}:${args.tmdbId}:v1`
+    const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
+      keys: [cacheKey],
+    })) as CacheEntry[]
+    if (
+      cached?.payload != null &&
+      Date.now() - cached.fetchedAt < VIDEOS_TTL_MS
+    ) {
+      return cached.payload as { key: string; name: string }
+    }
 
+    const data = await tmdbFetch(`/${args.mediaType}/${args.tmdbId}/videos`, {
+      language: "en-US",
+    })
+    const raw = (Array.isArray(data.results) ? data.results : []) as Record<
+      string,
+      unknown
+    >[]
+    const youtube = raw.filter(
+      (r) => r.site === "YouTube" && typeof r.key === "string" && r.key !== ""
+    )
+    // Official trailers first, then any trailer, teaser, clip; newest first
+    // within each bucket.
+    const typeRank = (r: Record<string, unknown>) =>
+      r.type === "Trailer" ? 0 : r.type === "Teaser" ? 1 : 2
+    youtube.sort((a, b) => {
+      const official =
+        (b.official === true ? 1 : 0) - (a.official === true ? 1 : 0)
+      if (official !== 0) return official
+      const rank = typeRank(a) - typeRank(b)
+      if (rank !== 0) return rank
+      return String(b.published_at ?? "").localeCompare(
+        String(a.published_at ?? "")
+      )
+    })
+    const best = youtube[0]
+    const payload =
+      best === undefined
+        ? null
+        : {
+            key: best.key as string,
+            name: typeof best.name === "string" ? best.name : "Trailer",
+          }
+
+    await ctx.runMutation(internal.tmdb_cache.putBatch, {
+      entries: [{ key: cacheKey, payload, fetchedAt: Date.now() }],
+    })
+    return payload
+  },
+})
+
+const genreValidator = v.object({ id: v.number(), name: v.string() })
 // Genre lists per media type — the Discover browse filter's options.
 export const genres = action({
   args: { mediaType: mediaTypeValidator },

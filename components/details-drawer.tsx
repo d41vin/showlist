@@ -2,8 +2,10 @@
 
 import {
   ArrowLeft01Icon,
+  Cancel01Icon,
   ImageNotFound01Icon,
   MoreHorizontalIcon,
+  PlayIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction } from "convex/react"
@@ -55,6 +57,7 @@ export function DetailsDrawer({
 }) {
   const details = useAction(api.tmdb.details)
   const recommendationsAction = useAction(api.tmdb.recommendations)
+  const videosAction = useAction(api.tmdb.videos)
 
   const [open, setOpen] = useState(false)
   const [current, setCurrent] = useState<MediaItem>(item)
@@ -69,9 +72,20 @@ export function DetailsDrawer({
   const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set())
   const [recsByKey, setRecsByKey] = useState<Record<string, MediaItem[]>>({})
   const [recsFailedKeys, setRecsFailedKeys] = useState<Set<string>>(new Set())
+  // Best YouTube trailer per title; undefined = not fetched yet, null =
+  // none found (or the lookup failed — the button just stays hidden).
+  const [trailerByKey, setTrailerByKey] = useState<
+    Record<string, { key: string; name: string } | null>
+  >({})
+  // Key of the title whose trailer plays in the hero. Drilling to another
+  // title or closing the drawer drops out of playback — derived from the
+  // key comparison, so no reset effect is needed.
+  const [playingKey, setPlayingKey] = useState<string | null>(null)
 
   const data = detailsByKey[currentKey] ?? null
   const recs = recsByKey[currentKey] ?? null
+  const trailer = trailerByKey[currentKey]
+  const playing = playingKey === currentKey
 
   useEffect(() => {
     if (
@@ -97,6 +111,27 @@ export function DetailsDrawer({
       cancelled = true
     }
   }, [open, currentKey, current, detailsByKey, failedKeys, details])
+
+  useEffect(() => {
+    if (!open || trailerByKey[currentKey] !== undefined) {
+      return
+    }
+    let cancelled = false
+    videosAction({ mediaType: current.mediaType, tmdbId: current.tmdbId })
+      .then((result) => {
+        if (!cancelled) {
+          setTrailerByKey((prev) => ({ ...prev, [currentKey]: result }))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTrailerByKey((prev) => ({ ...prev, [currentKey]: null }))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, currentKey, current, trailerByKey, videosAction])
 
   useEffect(() => {
     if (
@@ -160,6 +195,7 @@ export function DetailsDrawer({
           // Reopening always starts from the card that was clicked.
           if (!next) {
             setCurrent(item)
+            setPlayingKey(null)
           }
         }}
         showSwipeHandle
@@ -167,65 +203,90 @@ export function DetailsDrawer({
         <DrawerContent>
           <div className="mx-auto flex min-h-0 w-full flex-col overflow-y-auto md:max-w-2xl">
             {/* Cinematic hero: backdrop bleeding into the page background,
-                wordmark + facts + genre chips anchored bottom-left. */}
+                wordmark + facts + genre chips anchored bottom-left. While the
+                trailer plays, the embed replaces the backdrop. */}
             <div className="relative shrink-0 overflow-hidden">
-              {data === null && !failedKeys.has(currentKey) ? (
-                <div className="aspect-[16/9] w-full shrink-0 animate-pulse bg-muted" />
-              ) : data?.backdropPath ? (
-                <Image
-                  src={tmdbBackdropUrl(data.backdropPath)}
-                  alt={`${current.title} backdrop`}
-                  width={1280}
-                  height={720}
-                  priority
-                  sizes="(max-width: 768px) 100vw, 672px"
-                  className="aspect-[16/9] w-full shrink-0 object-cover"
-                />
+              {playing && trailer ? (
+                <>
+                  <DrawerTitle className="sr-only">{current.title}</DrawerTitle>
+                  <iframe
+                    src={`https://www.youtube-nocookie.com/embed/${trailer.key}?autoplay=1&rel=0`}
+                    title={trailer.name}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="aspect-[16/9] w-full shrink-0 bg-black"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="absolute top-2 right-2 rounded-full bg-background/80 backdrop-blur"
+                    aria-label="Close trailer"
+                    onClick={() => setPlayingKey(null)}
+                  >
+                    <HugeiconsIcon icon={Cancel01Icon} />
+                  </Button>
+                </>
               ) : (
-                <div className="aspect-[16/9] w-full shrink-0 bg-muted" />
-              )}
-
-              {/* Fade into the page in both themes */}
-              <div
-                aria-hidden
-                className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent"
-              />
-
-              {data !== null && !failedKeys.has(currentKey) && (
-                <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 px-6 pb-5">
-                  {data.logoPath ? (
+                <>
+                  {data === null && !failedKeys.has(currentKey) ? (
+                    <div className="aspect-[16/9] w-full shrink-0 animate-pulse bg-muted" />
+                  ) : data?.backdropPath ? (
                     <Image
-                      src={tmdbLogoUrl(data.logoPath)}
-                      alt={current.title}
-                      width={260}
-                      height={96}
-                      sizes="260px"
-                      className="max-h-16 w-auto max-w-[65%] self-start object-contain drop-shadow-lg"
+                      src={tmdbBackdropUrl(data.backdropPath)}
+                      alt={`${current.title} backdrop`}
+                      width={1280}
+                      height={720}
                       priority
+                      sizes="(max-width: 768px) 100vw, 672px"
+                      className="aspect-[16/9] w-full shrink-0 object-cover"
                     />
                   ) : (
-                    <DrawerTitle className="text-2xl font-bold tracking-tight drop-shadow-lg">
-                      {current.title}
-                    </DrawerTitle>
+                    <div className="aspect-[16/9] w-full shrink-0 bg-muted" />
                   )}
-                  <DrawerDescription className="sr-only">
-                    {current.mediaType === "movie" ? "Movie" : "Show"}
-                    {current.year ? ` · ${current.year}` : ""}
-                  </DrawerDescription>
-                  <HeroFacts data={data} item={current} />
-                  {data.genres.length > 0 && (
-                    <div className="mt-0.5 flex flex-wrap gap-1.5">
-                      {data.genres.slice(0, 4).map((genre) => (
-                        <span
-                          key={genre}
-                          className="rounded-full border border-border/70 px-2.5 py-0.5 text-xs text-foreground/85 backdrop-blur-sm"
-                        >
-                          {genre}
-                        </span>
-                      ))}
+
+                  {/* Fade into the page in both themes */}
+                  <div
+                    aria-hidden
+                    className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent"
+                  />
+
+                  {data !== null && !failedKeys.has(currentKey) && (
+                    <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 px-6 pb-5">
+                      {data.logoPath ? (
+                        <Image
+                          src={tmdbLogoUrl(data.logoPath)}
+                          alt={current.title}
+                          width={260}
+                          height={96}
+                          sizes="260px"
+                          className="max-h-16 w-auto max-w-[65%] self-start object-contain drop-shadow-lg"
+                          priority
+                        />
+                      ) : (
+                        <DrawerTitle className="text-2xl font-bold tracking-tight drop-shadow-lg">
+                          {current.title}
+                        </DrawerTitle>
+                      )}
+                      <DrawerDescription className="sr-only">
+                        {current.mediaType === "movie" ? "Movie" : "Show"}
+                        {current.year ? ` · ${current.year}` : ""}
+                      </DrawerDescription>
+                      <HeroFacts data={data} item={current} />
+                      {data.genres.length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-1.5">
+                          {data.genres.slice(0, 4).map((genre) => (
+                            <span
+                              key={genre}
+                              className="rounded-full border border-border/70 px-2.5 py-0.5 text-xs text-foreground/85 backdrop-blur-sm"
+                            >
+                              {genre}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
             </div>
 
@@ -253,6 +314,16 @@ export function DetailsDrawer({
                   collections={collections}
                   layout="row"
                 />
+                {trailer && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setPlayingKey(currentKey)}
+                  >
+                    <HugeiconsIcon icon={PlayIcon} />
+                    Play trailer
+                  </Button>
+                )}
               </div>
             )}
 
