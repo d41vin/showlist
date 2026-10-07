@@ -15,7 +15,12 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
-import { localTodayISO, tmdbStillUrl, type MediaItem } from "@/lib/media"
+import {
+  localTodayISO,
+  tmdbPosterThumbUrl,
+  tmdbStillUrl,
+  type MediaItem,
+} from "@/lib/media"
 import { cn } from "@/lib/utils"
 
 type ShowDetails = FunctionReturnType<typeof api.tmdb.details>
@@ -128,16 +133,31 @@ export function EpisodesSection({
         </div>
       )}
 
-      {/* Season chips — horizontally scrollable when there are many seasons */}
+      {/* Season chips — horizontally scrollable when there are many seasons.
+          Chips with a season poster show its thumb before the label; ones
+          without fall back to the plain label. */}
       <div className="hide-scrollbar -mx-6 mt-3 flex gap-1.5 overflow-x-auto px-6 pb-1">
         {seasons.map((seasonSummary) => (
           <Button
             key={seasonSummary.season}
             variant={seasonSummary.season === season ? "default" : "secondary"}
             size="sm"
-            className="shrink-0"
+            className={cn(
+              "shrink-0",
+              seasonSummary.posterPath && "gap-1.5 pl-1.5"
+            )}
             onClick={() => setSelected(seasonSummary.season)}
           >
+            {seasonSummary.posterPath && (
+              <Image
+                src={tmdbPosterThumbUrl(seasonSummary.posterPath)}
+                alt=""
+                width={16}
+                height={24}
+                sizes="16px"
+                className="h-6 w-4 rounded-[4px] object-cover"
+              />
+            )}
             {seasonChipLabel(seasonSummary)}
           </Button>
         ))}
