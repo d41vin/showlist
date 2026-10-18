@@ -30,6 +30,11 @@ Small user-directed pass on top of session 7.
    phones with no scroll handling. Top-nav search was considered and
    rejected: search is a home-page mode (results replace tab content, AI
    describe is welded to the bar), and the header slot is already occupied.
+4. **Alignment follow-up** (user feedback): the tab pill kept its mobile
+   `px-6` on md+ — reset with `md:px-0` so it sits flush with the content
+   column; the top nav now wraps its content in the same
+   `mx-auto w-full max-w-6xl px-6` container (border stays full-width), so
+   wordmark/nav align with home and Discover content.
 
 **Verified:** typecheck, lint, 13 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
