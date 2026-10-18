@@ -7,10 +7,10 @@
 
 ## Status
 
-**Session 8 — Home header rework (branch `improvements`): COMPLETE, awaiting user verification.**
-Small user-directed pass on top of session 7.
+**Session 8 — Home header rework + schedule weekly view (branch `improvements`): COMPLETE, awaiting user verification.**
+User-directed pass on top of session 7.
 
-## Session 8 summary — Home header rework (2026-10-18)
+## Session 8 summary — Home header rework + schedule weekly view (2026-10-18)
 
 1. **Continue Watching removed** (`7f7af2a`): the row duplicated the Watching
    tab (every tile also appears there as a full card) and its "next episode"
@@ -42,6 +42,21 @@ Small user-directed pass on top of session 7.
    md to lg (1024px): one row only when it fits with real slack; below that
    the stacked layout applies (search capped `max-w-xs`, `sm:max-w-sm`,
    centered; tab pill full-bleed scrollable).
+6. **Schedule weekly view** (`03ee71e`, user-directed): the "next 30 days"
+   list + "Catch up" section are replaced by a Monday-start week view with
+   free prev/next navigation and a "Back to this week" reset. Backend:
+   `schedule.get` now takes `{tmdbIds, from, to}` and returns every episode
+   airing in the range — window math reduced to `inRange` in
+   schedule_windows (tests updated, 12 total). Candidate seasons: the
+   next-episode season (when its next episode airs ≤ `to`) and the
+   last-episode season (when it aired ≥ `from`) — this also lifts the old
+   hidden 30-day cap, so hiatus shows now appear in future weeks. Known
+   honest limit: past weeks across season boundaries can be sparse; the
+   empty state says so. Provider-rail airing badges migrated to the range
+   shape (window [today-8, today+30]; "New season" = any E1 in window).
+   Monthly view discussed and parked — week navigation covers it. Smoke-
+   tested via `npx convex run` (BB finale week returns "Felina"; empty
+   weeks return []) and deployed clean.
 
 **Verified:** typecheck, lint, 13 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
@@ -371,5 +386,5 @@ Carried over from Sessions 1–2 (all still true):
 | 5 | 2026-10-04 | Complete. Improvements sweep on `improvements` branch (episodes, schedule, AI, discover redesign, audit). Awaiting user verification, then curated merge. |
 | 6 | 2026-10-05 | Complete. Feature completion pass (polish, filters, provider rail, stats, drawer redesign). Awaiting user verification, then curated merge. |
 | 7 | 2026-10-07 | Complete. Seven-feature pass (trailers, rail toggle+badges, list sort/filter, in-library row, export, season posters, merged genre browse). Awaiting user verification, then curated merge. |
-| 8 | 2026-10-18 | Complete. Home header rework (CW removal, one-row tabs/search header, mobile scrollable tabs). Awaiting user verification, then curated merge. |
+| 8 | 2026-10-18 | Complete. Home header rework (CW removal, one-row tabs/search header, mobile scrollable tabs) + schedule weekly view (free week nav, catch-up removed). Awaiting user verification, then curated merge. |
 
