@@ -35,6 +35,13 @@ Small user-directed pass on top of session 7.
    column; the top nav now wraps its content in the same
    `mx-auto w-full max-w-6xl px-6` container (border stays full-width), so
    wordmark/nav align with home and Discover content.
+5. **Overflow follow-up** (user feedback): the one-row layout previously
+   engaged at md (768px) where tabs + search left ~18px of slack — Windows
+   font metrics overflowed it in the ~768–800px band (wrapper is
+   overflow-visible there). The row/search/wrapper breakpoints moved from
+   md to lg (1024px): one row only when it fits with real slack; below that
+   the stacked layout applies (search capped `max-w-xs`, `sm:max-w-sm`,
+   centered; tab pill full-bleed scrollable).
 
 **Verified:** typecheck, lint, 13 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
