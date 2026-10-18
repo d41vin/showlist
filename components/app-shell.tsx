@@ -21,7 +21,6 @@ import {
   DeleteCollectionDialog,
   RenameCollectionDialog,
 } from "@/components/collection-admin-dialogs"
-import { ContinueWatching } from "@/components/continue-watching"
 import { CreateCollectionDialog } from "@/components/create-collection-dialog"
 import { MediaRow } from "@/components/media-row"
 import { ScheduleTab } from "@/components/schedule-tab"
@@ -305,14 +304,6 @@ export function AppShell() {
           </div>
 
           <div className="mt-8">
-            {!searchActive && (
-              <ContinueWatching
-                isAuthenticated={isAuthenticated}
-                myItems={myItems}
-                stateByKey={stateByKey}
-                collections={collections}
-              />
-            )}
             {searchActive ? (
               <>
                 {libraryMatches.length > 0 && (
