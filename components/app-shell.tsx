@@ -286,8 +286,8 @@ export function AppShell() {
               setQuery("")
             }}
           >
-            <div className="flex flex-col gap-4 md:flex-row md:items-center">
-              <div className="relative w-full md:ml-auto md:w-64">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+              <div className="relative w-full max-w-xs self-center sm:max-w-sm lg:ml-auto lg:w-64">
                 <HugeiconsIcon
                   icon={Search01Icon}
                   className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -315,7 +315,7 @@ export function AppShell() {
                 </Button>
               </div>
               {!searchActive && (
-                <div className="hide-scrollbar -mx-6 overflow-x-auto px-6 py-1 md:order-first md:mx-0 md:overflow-visible md:px-0 md:py-0">
+                <div className="hide-scrollbar -mx-6 overflow-x-auto px-6 py-1 lg:order-first lg:mx-0 lg:overflow-visible lg:px-0 lg:py-0">
                   <TabsList>
                     <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
                     <TabsTrigger value="watched">Watched</TabsTrigger>
