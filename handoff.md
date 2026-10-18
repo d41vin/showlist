@@ -68,6 +68,17 @@ User-directed pass on top of session 7.
    pending the user's final pick list (full US movie-provider list pulled
    from TMDB and reported — duplicates are subscription vs store/channel
    variants).
+8. **Streaming curation** (user-directed): the rail is exactly six services
+   in display order — Netflix (8), Amazon Prime Video (9), HBO Max (1825,
+   the Amazon Channel entry — TMDB has no direct Max id; display name
+   overridden), Disney Plus (337), Apple TV (350, the Apple TV+
+   subscription), Paramount+ (2303, the Premium tier). Tile logos are
+   forced monochrome to match the theme (`brightness-0 dark:invert` —
+   black in light mode, white in dark) and dim to 60% until hovered or
+   selected, per the user's reference screenshot. Note: TMDB logos are
+   fixed PNGs — recoloring only works via CSS filters, which is what this
+   does. HBO Max's channel-variant logo needs an eyeball check; a
+   logoPath override is the fallback if it looks off.
 
 **Verified:** typecheck, lint, 13 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
