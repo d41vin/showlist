@@ -11,7 +11,15 @@ import { cn } from "@/lib/utils"
 // the edges for mouse-driven paging. The buttons sit in the page gutter so
 // they barely cover the cards, and disable (fade out) at either end of the
 // rail. Mobile keeps pure swipe — the chevrons only render from lg up.
-export function RailScroller({ children }: { children: React.ReactNode }) {
+// `className` extends the inner scroller (e.g. snap classes for paging
+// rails like the hero).
+export function RailScroller({
+  children,
+  className,
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
   const railRef = useRef<HTMLDivElement>(null)
   const [atStart, setAtStart] = useState(true)
   const [atEnd, setAtEnd] = useState(true)
@@ -48,7 +56,10 @@ export function RailScroller({ children }: { children: React.ReactNode }) {
       <div
         ref={railRef}
         onScroll={updateEnds}
-        className="hide-scrollbar flex gap-4 overflow-x-auto pb-2"
+        className={cn(
+          "hide-scrollbar flex gap-4 overflow-x-auto pb-2",
+          className
+        )}
       >
         {children}
       </div>

@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { AiForYou } from "@/components/ai-for-you"
 import { DiscoverHero } from "@/components/discover-hero"
 import { ProviderRail } from "@/components/provider-rail"
+import { RailScroller } from "@/components/rail-scroller"
 import { ShowCard } from "@/components/show-card"
 import {
   useCollectionSummaries,
@@ -514,15 +515,14 @@ function DiscoverContent() {
   const GRID_CLASS =
     "grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 
-  const heroItem =
+  const heroItems =
     !searchActive &&
     !loading &&
     !error &&
     genreName === null &&
-    category === "trending" &&
-    rows[0]?.items[0] !== undefined
-      ? rows[0].items[0]
-      : null
+    category === "trending"
+      ? (rows[0]?.items ?? []).slice(0, 5)
+      : []
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
@@ -591,9 +591,25 @@ function DiscoverContent() {
             value={category}
             onValueChange={(value) => setCategory(value as Category)}
           >
-            {heroItem !== null && (
+            {heroItems.length > 0 && (
               <div className="mb-8">
-                <DiscoverHero item={heroItem} gridState={gridState} />
+                {/* Billboard strip: the top five trending titles as
+                    full-width hero pages — swipe on touch, chevrons on
+                    desktop, snap-locked. */}
+                <RailScroller className="snap-x snap-mandatory">
+                  {heroItems.map((item, index) => (
+                    <div
+                      key={`${item.mediaType}:${item.tmdbId}`}
+                      className="w-full shrink-0 snap-start"
+                    >
+                      <DiscoverHero
+                        item={item}
+                        gridState={gridState}
+                        priority={index === 0}
+                      />
+                    </div>
+                  ))}
+                </RailScroller>
               </div>
             )}
 

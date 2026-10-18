@@ -236,13 +236,15 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
         </div>
       </div>
 
-      {/* Provider logo tiles */}
+      {/* Provider tiles — TMDB's provider logos are opaque square "app
+          icon" assets (no transparency), so they fill the tile instead of
+          floating as wordmarks. */}
       <div className="hide-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1">
         {providers === null
-          ? Array.from({ length: 7 }, (_, i) => (
+          ? Array.from({ length: 6 }, (_, i) => (
               <div
                 key={i}
-                className="h-14 w-24 shrink-0 animate-pulse rounded-xl bg-muted"
+                className="h-14 w-14 shrink-0 animate-pulse rounded-xl bg-muted"
               />
             ))
           : ordered.map((provider) => (
@@ -253,7 +255,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                 aria-label={provider.name}
                 onClick={() => setPicked(provider.id)}
                 className={cn(
-                  "flex h-14 w-24 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-muted p-2.5 transition-all",
+                  "h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-muted transition-all",
                   selected === provider.id
                     ? "ring-2 ring-primary"
                     : "opacity-60 hover:opacity-100"
@@ -263,10 +265,10 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                   <Image
                     src={`https://image.tmdb.org/t/p/w154${provider.logoPath}`}
                     alt=""
-                    width={72}
-                    height={40}
-                    sizes="72px"
-                    className="max-h-full w-auto object-contain brightness-0 dark:invert"
+                    width={56}
+                    height={56}
+                    sizes="56px"
+                    className="size-full object-cover"
                   />
                 )}
               </button>

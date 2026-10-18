@@ -14,15 +14,18 @@ import { tmdbBackdropUrl, tmdbLogoUrl, type MediaItem } from "@/lib/media"
 
 type Details = FunctionReturnType<typeof api.tmdb.details>
 
-// Discover hero: the top trending title as a billboard — backdrop art,
+// Discover hero: one top trending title as a billboard — backdrop art,
 // wordmark logo, facts and the standard action row. Swiss restraint: the
-// image and typography do the work, no extra chrome.
+// image and typography do the work, no extra chrome. Rendered in a
+// snap-paged strip of the top five; only the first page loads eagerly.
 export function DiscoverHero({
   item,
   gridState,
+  priority = false,
 }: {
   item: MediaItem
   gridState: CardGridState
+  priority?: boolean
 }) {
   const details = useAction(api.tmdb.details)
   // Keyed by item so switching titles derives the loading state instead of
@@ -71,7 +74,7 @@ export function DiscoverHero({
           fill
           sizes="(max-width: 1152px) 100vw, 1152px"
           className="object-cover"
-          priority
+          priority={priority}
         />
       ) : null}
       {/* Readability gradient — stronger at the bottom where content sits. */}
@@ -91,7 +94,7 @@ export function DiscoverHero({
                 height={104}
                 sizes="280px"
                 className="max-h-14 w-auto max-w-[60%] self-start object-contain drop-shadow-lg sm:max-h-16"
-                priority
+                priority={priority}
               />
             ) : (
               <h2 className="max-w-[80%] text-2xl font-bold tracking-tight text-white drop-shadow-lg sm:text-3xl">
