@@ -7,6 +7,35 @@
 
 ## Status
 
+**Session 8 — Home header rework (branch `improvements`): COMPLETE, awaiting user verification.**
+Small user-directed pass on top of session 7.
+
+## Session 8 summary — Home header rework (2026-10-18)
+
+1. **Continue Watching removed** (`7f7af2a`): the row duplicated the Watching
+   tab (every tile also appears there as a full card) and its "next episode"
+   captions duplicate the Schedule tab's computation. Bonus: one fewer
+   `schedule.get` action call per signed-in home load.
+2. **One-row header** (`41cb107`): on md+ the tabs pill sits left and the
+   search input right (compact `w-64`, AI sparkle still inside); type/sort
+   filters are left-aligned under the tabs. While searching, the tabs stay
+   visible and clicking a tab also clears the query (one-tap exit from
+   search). The `Tabs` root now wraps the search row (TabsList must live
+   inside it); the results branch is a plain `mt-8` div; AiDescribe still
+   takes over the whole area. Search placeholder shortened to "Search…".
+3. **Mobile** (< md): two stacked rows — full-width search on top (unchanged
+   order), then the tab pill in a horizontally scrollable full-bleed wrapper
+   (`-mx-6` + `hide-scrollbar`, `py-1` so the focus ring doesn't clip). This
+   also fixes a pre-existing bug: the pill (~430px) silently overflowed small
+   phones with no scroll handling. Top-nav search was considered and
+   rejected: search is a home-page mode (results replace tab content, AI
+   describe is welded to the bar), and the header slot is already occupied.
+
+**Verified:** typecheck, lint, 13 vitest tests, build all clean. Signed-in UI
+awaits user testing on the dev server (:3000).
+
+## Previous status
+
 **Session 7 — Seven-feature pass (branch `improvements`): COMPLETE, awaiting user verification.**
 Builds on sessions 5–6; same branch, same verification gates.
 
@@ -330,4 +359,5 @@ Carried over from Sessions 1–2 (all still true):
 | 5 | 2026-10-04 | Complete. Improvements sweep on `improvements` branch (episodes, schedule, AI, discover redesign, audit). Awaiting user verification, then curated merge. |
 | 6 | 2026-10-05 | Complete. Feature completion pass (polish, filters, provider rail, stats, drawer redesign). Awaiting user verification, then curated merge. |
 | 7 | 2026-10-07 | Complete. Seven-feature pass (trailers, rail toggle+badges, list sort/filter, in-library row, export, season posters, merged genre browse). Awaiting user verification, then curated merge. |
+| 8 | 2026-10-18 | Complete. Home header rework (CW removal, one-row tabs/search header, mobile scrollable tabs). Awaiting user verification, then curated merge. |
 
