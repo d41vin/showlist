@@ -286,7 +286,7 @@ export function AppShell() {
               setQuery("")
             }}
           >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-4">
               <div className="relative w-full max-w-xs self-center sm:max-w-sm lg:ml-auto lg:w-64">
                 <HugeiconsIcon
                   icon={Search01Icon}
