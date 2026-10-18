@@ -275,37 +275,59 @@ export function AppShell() {
         </div>
       ) : (
         <>
-          <div className="relative mx-auto w-full max-w-xl">
-            <HugeiconsIcon
-              icon={Search01Icon}
-              className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              type="search"
-              placeholder="Search movies and shows..."
-              className="pr-11 pl-9"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value)
-                setActiveCardKey(null)
-              }}
-              aria-label="Search movies and shows"
-            />
-            <Button
-              variant={aiMode ? "default" : "secondary"}
-              size="icon-sm"
-              className="absolute top-1/2 right-1.5 -translate-y-1/2"
-              aria-pressed={aiMode}
-              aria-label="Describe what you want to watch instead"
-              onClick={() => setAiMode(true)}
-            >
-              <HugeiconsIcon icon={AiMagicIcon} />
-            </Button>
-          </div>
-
-          <div className="mt-8">
+          <Tabs
+            value={tab}
+            onValueChange={(value) => {
+              setTab(String(value))
+              setActiveCardKey(null)
+              // Leaving/re-entering Collections always lands on the cards view.
+              setSelectedCollectionId(null)
+              // Clicking a tab doubles as the way out of an active search.
+              setQuery("")
+            }}
+          >
+            <div className="flex flex-col gap-4 md:flex-row md:items-center">
+              <div className="relative w-full md:ml-auto md:w-64">
+                <HugeiconsIcon
+                  icon={Search01Icon}
+                  className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  type="search"
+                  placeholder="Search…"
+                  className="pr-11 pl-9"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value)
+                    setActiveCardKey(null)
+                  }}
+                  aria-label="Search movies and shows"
+                />
+                <Button
+                  variant={aiMode ? "default" : "secondary"}
+                  size="icon-sm"
+                  className="absolute top-1/2 right-1.5 -translate-y-1/2"
+                  aria-pressed={aiMode}
+                  aria-label="Describe what you want to watch instead"
+                  onClick={() => setAiMode(true)}
+                >
+                  <HugeiconsIcon icon={AiMagicIcon} />
+                </Button>
+              </div>
+              {!searchActive && (
+                <div className="hide-scrollbar -mx-6 overflow-x-auto px-6 py-1 md:order-first md:mx-0 md:overflow-visible md:py-0">
+                  <TabsList>
+                    <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
+                    <TabsTrigger value="watched">Watched</TabsTrigger>
+                    <TabsTrigger value="watching">Watching</TabsTrigger>
+                    <TabsTrigger value="schedule">Schedule</TabsTrigger>
+                    <TabsTrigger value="collections">Collections</TabsTrigger>
+                  </TabsList>
+                </div>
+              )}
+            </div>
             {searchActive ? (
-              <>
+              <div className="mt-8">
                 {libraryMatches.length > 0 && (
                   <div className="mb-8">
                     <MediaRow
@@ -332,26 +354,11 @@ export function AppShell() {
                   onLoadMore={loadMore}
                   {...gridProps}
                 />
-              </>
+              </div>
             ) : (
-              <Tabs
-                value={tab}
-                onValueChange={(value) => {
-                  setTab(String(value))
-                  setActiveCardKey(null)
-                  // Leaving/re-entering Collections always lands on the cards view.
-                  setSelectedCollectionId(null)
-                }}
-              >
-                <TabsList className="mx-auto">
-                  <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
-                  <TabsTrigger value="watched">Watched</TabsTrigger>
-                  <TabsTrigger value="watching">Watching</TabsTrigger>
-                  <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                  <TabsTrigger value="collections">Collections</TabsTrigger>
-                </TabsList>
+              <>
                 {LIST_TABS.has(tab) && (
-                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <div className="mt-4 flex flex-wrap items-center justify-start gap-2">
                     <MediaTypeToggle value={listType} onChange={setListType} />
                     <Select
                       items={LIST_SORT_ITEMS}
@@ -399,11 +406,7 @@ export function AppShell() {
                 </TabsContent>
                 <TabsContent value="watching" className="mt-6">
                   <CardGrid
-                    items={applyListControls(
-                      watchingItems,
-                      listType,
-                      listSort
-                    )}
+                    items={applyListControls(watchingItems, listType, listSort)}
                     loading={myItems === undefined}
                     emptyMessage={emptyMessageFor(
                       "Nothing in progress yet — toggle Watching on any card.",
@@ -456,9 +459,9 @@ export function AppShell() {
                     </>
                   )}
                 </TabsContent>
-              </Tabs>
+              </>
             )}
-          </div>
+          </Tabs>
         </>
       )}
 
