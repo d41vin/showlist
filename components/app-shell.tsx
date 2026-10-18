@@ -315,7 +315,7 @@ export function AppShell() {
                 </Button>
               </div>
               {!searchActive && (
-                <div className="hide-scrollbar -mx-6 overflow-x-auto px-6 py-1 md:order-first md:mx-0 md:overflow-visible md:py-0">
+                <div className="hide-scrollbar -mx-6 overflow-x-auto px-6 py-1 md:order-first md:mx-0 md:overflow-visible md:px-0 md:py-0">
                   <TabsList>
                     <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
                     <TabsTrigger value="watched">Watched</TabsTrigger>

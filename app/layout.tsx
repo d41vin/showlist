@@ -54,24 +54,26 @@ export default function RootLayout({
         <ClerkProvider appearance={{ theme: shadcn }}>
           <ConvexClientProvider>
             <ThemeProvider>
-              <header className="flex h-14 items-center justify-between gap-2 border-b px-6">
-                <AppHeader />
-                <div className="flex items-center gap-2">
-                  <ThemeToggle />
-                  <Show when="signed-out">
-                    <SignInButton>
-                      <Button variant="ghost" size="sm">
-                        Sign in
-                      </Button>
-                    </SignInButton>
-                    <SignUpButton>
-                      <Button size="sm">Sign up</Button>
-                    </SignUpButton>
-                  </Show>
-                  <Show when="signed-in">
-                    <AiSettingsButton />
-                    <UserButton />
-                  </Show>
+              <header className="border-b">
+                <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-6">
+                  <AppHeader />
+                  <div className="flex items-center gap-2">
+                    <ThemeToggle />
+                    <Show when="signed-out">
+                      <SignInButton>
+                        <Button variant="ghost" size="sm">
+                          Sign in
+                        </Button>
+                      </SignInButton>
+                      <SignUpButton>
+                        <Button size="sm">Sign up</Button>
+                      </SignUpButton>
+                    </Show>
+                    <Show when="signed-in">
+                      <AiSettingsButton />
+                      <UserButton />
+                    </Show>
+                  </div>
                 </div>
               </header>
               {children}
