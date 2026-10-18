@@ -79,6 +79,16 @@ User-directed pass on top of session 7.
    fixed PNGs — recoloring only works via CSS filters, which is what this
    does. HBO Max's channel-variant logo needs an eyeball check; a
    logoPath override is the fallback if it looks off.
+9. **Hero strip + tile fix** (user-directed): the hero is now a snap-paged
+   billboard strip of the top FIVE trending titles (RailScroller with
+   `snap-x snap-mandatory`, full-width pages; only page 1 loads eagerly).
+   The mono-filter tile experiment failed — inspection showed TMDB's
+   provider logos are opaque 154×154 squares (zero alpha), so the filters
+   produced solid blocks. Tiles are now app-icon style: 56×56 rounded
+   squares, logo filling the tile via object-cover, no filters, dim 60%
+   until hover/selection. Provider sort order confirmed: TMDB discover
+   `sort_by=popularity.desc` filtered by watch provider — popularity, not
+   recency or trending.
 
 **Verified:** typecheck, lint, 13 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
