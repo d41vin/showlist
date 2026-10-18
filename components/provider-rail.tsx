@@ -23,19 +23,18 @@ type ScheduleEntry = FunctionReturnType<
   typeof api.schedule.get
 >["entries"][number]
 
-// Curated rail order — the big services first, then whatever else TMDB
-// returns for the region. Unknown services keep their alphabetical spot.
-const FEATURED_ORDER = [
-  "Netflix",
-  "Prime Video",
-  "Disney+",
-  "HBO Max",
-  "Max",
-  "Apple TV+",
-  "Hulu",
-  "Paramount+",
-  "Peacock",
-  "Crunchyroll",
+// The curated streaming services — exactly these, in display order. Ids
+// are TMDB watch-provider ids (US region). Two quirks of TMDB's data: HBO
+// Max has no direct entry, only its Amazon Channel (1825); Paramount+
+// splits into Essential/Premium tiers — we use Premium. Display names are
+// ours where TMDB's are clunky.
+const CURATED_PROVIDERS: { id: number; displayName?: string }[] = [
+  { id: 8 }, // Netflix
+  { id: 9 }, // Amazon Prime Video
+  { id: 1825, displayName: "HBO Max" },
+  { id: 337 }, // Disney Plus
+  { id: 350 }, // Apple TV (the Apple TV+ subscription service)
+  { id: 2303, displayName: "Paramount+" },
 ]
 
 // "New season" when a season premiere (E1) airs inside the badge window
@@ -94,22 +93,17 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
     }
   }, [providersAction])
 
-  // Featured services first (in the curated order), rest after. Plain
-  // computation over a tiny list — deliberately not a hook so the early
-  // returns below stay legal.
+  // The curated services only, in display order; anything missing from
+  // TMDB's list drops out silently.
   const ordered: Providers = useMemo(() => {
     const list = providers ?? []
-    const featured: typeof list = []
-    for (const name of FEATURED_ORDER) {
-      const match = list.find(
-        (p) => p.name.toLowerCase() === name.toLowerCase()
-      )
-      if (match) {
-        featured.push(match)
+    return CURATED_PROVIDERS.flatMap(({ id, displayName }) => {
+      const match = list.find((p) => p.id === id)
+      if (match === undefined) {
+        return []
       }
-    }
-    const rest = list.filter((p) => !featured.includes(p))
-    return [...featured, ...rest].slice(0, 12)
+      return [{ ...match, name: displayName ?? match.name }]
+    })
   }, [providers])
 
   // Effective selection: the user's pick, else the first service — derived
@@ -117,8 +111,8 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
   // a click.
   const selected = picked ?? ordered[0]?.id ?? null
   const selectedProvider = useMemo(
-    () => providers?.find((p) => p.id === selected) ?? null,
-    [providers, selected]
+    () => ordered.find((p) => p.id === selected) ?? null,
+    [ordered, selected]
   )
   const selectedKey = selected !== null ? `${selected}:${railType}` : null
   const titles =
@@ -262,7 +256,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                   "flex h-14 w-24 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-muted p-2.5 transition-all",
                   selected === provider.id
                     ? "ring-2 ring-primary"
-                    : "opacity-80 hover:opacity-100"
+                    : "opacity-60 hover:opacity-100"
                 )}
               >
                 {provider.logoPath && (
@@ -272,7 +266,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                     width={72}
                     height={40}
                     sizes="72px"
-                    className="max-h-full w-auto object-contain"
+                    className="max-h-full w-auto object-contain brightness-0 dark:invert"
                   />
                 )}
               </button>
