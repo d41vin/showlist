@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
+import { RailScroller } from "@/components/rail-scroller"
 import { aiRecommendJson, FOR_YOU_SYSTEM_PROMPT, useAiConfig } from "@/lib/ai"
 import { mediaKey, type MediaItem } from "@/lib/media"
 
@@ -116,7 +117,7 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
           </Button>
         </div>
       ) : loading && rows === null ? (
-        <div className="hide-scrollbar flex gap-4 overflow-x-auto pb-2">
+        <RailScroller>
           {Array.from({ length: 6 }, (_, i) => (
             <div
               key={i}
@@ -126,7 +127,7 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
               <Skeleton className="h-4 w-3/4" />
             </div>
           ))}
-        </div>
+        </RailScroller>
       ) : rows !== null && rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           The AI couldn&rsquo;t find matches — try again for new picks.
@@ -137,7 +138,7 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
           uses your key.
         </p>
       ) : (
-        <div className="hide-scrollbar flex gap-4 overflow-x-auto pb-2">
+        <RailScroller>
           {rows.map((row) => (
             <div
               key={row.key}
@@ -160,7 +161,7 @@ export function AiForYou({ isAuthenticated }: { isAuthenticated: boolean }) {
               )}
             </div>
           ))}
-        </div>
+        </RailScroller>
       )}
     </section>
   )

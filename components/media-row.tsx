@@ -1,5 +1,6 @@
 "use client"
 
+import { RailScroller } from "@/components/rail-scroller"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { MediaItem } from "@/lib/media"
 
@@ -28,7 +29,7 @@ export function MediaRow({
   return (
     <section className="flex flex-col gap-2">
       {title && <h2 className="text-lg font-semibold">{title}</h2>}
-      <div className="hide-scrollbar flex gap-4 overflow-x-auto pb-2">
+      <RailScroller>
         {loading
           ? Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)
           : visible.map((item, index) => (
@@ -47,7 +48,7 @@ export function MediaRow({
                 )}
               </div>
             ))}
-      </div>
+      </RailScroller>
     </section>
   )
 }

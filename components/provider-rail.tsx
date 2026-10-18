@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { ShowCard } from "@/components/show-card"
 import type { CardGridState } from "@/components/use-item-state"
 import { api } from "@/convex/_generated/api"
+import { RailScroller } from "@/components/rail-scroller"
 import {
   localDateOffset,
   localTodayISO,
@@ -61,7 +62,9 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
 
   const [providers, setProviders] = useState<Providers | null>(null)
   const [failed, setFailed] = useState(false)
-  const [selected, setSelected] = useState<number | null>(null)
+  // The user's explicit service pick; null = "first service" (derived below
+  // once the provider list loads).
+  const [picked, setPicked] = useState<number | null>(null)
   const [railType, setRailType] = useState<"movie" | "tv">("movie")
   // Title lists keyed by `${providerId}:${railType}`; loading is derived.
   const [titlesByKey, setTitlesByKey] = useState<Record<string, MediaItem[]>>(
@@ -91,6 +94,28 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
     }
   }, [providersAction])
 
+  // Featured services first (in the curated order), rest after. Plain
+  // computation over a tiny list — deliberately not a hook so the early
+  // returns below stay legal.
+  const ordered: Providers = useMemo(() => {
+    const list = providers ?? []
+    const featured: typeof list = []
+    for (const name of FEATURED_ORDER) {
+      const match = list.find(
+        (p) => p.name.toLowerCase() === name.toLowerCase()
+      )
+      if (match) {
+        featured.push(match)
+      }
+    }
+    const rest = list.filter((p) => !featured.includes(p))
+    return [...featured, ...rest].slice(0, 12)
+  }, [providers])
+
+  // Effective selection: the user's pick, else the first service — derived
+  // during render, not stored in an effect, so the rail shows titles without
+  // a click.
+  const selected = picked ?? ordered[0]?.id ?? null
   const selectedProvider = useMemo(
     () => providers?.find((p) => p.id === selected) ?? null,
     [providers, selected]
@@ -179,24 +204,6 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
     }
   }, [selectedKey, tvIdsKey, badgesByKey, scheduleGet])
 
-  // Featured services first (in the curated order), rest after. Plain
-  // computation over a tiny list — deliberately not a hook so the early
-  // returns below stay legal.
-  const ordered: Providers = useMemo(() => {
-    const list = providers ?? []
-    const featured: typeof list = []
-    for (const name of FEATURED_ORDER) {
-      const match = list.find(
-        (p) => p.name.toLowerCase() === name.toLowerCase()
-      )
-      if (match) {
-        featured.push(match)
-      }
-    }
-    const rest = list.filter((p) => !featured.includes(p))
-    return [...featured, ...rest].slice(0, 12)
-  }, [providers])
-
   if (failed || (providers !== null && providers.length === 0)) {
     return null
   }
@@ -250,11 +257,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                 type="button"
                 aria-pressed={selected === provider.id}
                 aria-label={provider.name}
-                onClick={() =>
-                  setSelected((prev) =>
-                    prev === provider.id ? null : provider.id
-                  )
-                }
+                onClick={() => setPicked(provider.id)}
                 className={cn(
                   "flex h-14 w-24 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-muted p-2.5 transition-all",
                   selected === provider.id
@@ -284,20 +287,20 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
               Couldn&rsquo;t load titles for this service.
             </p>
           ) : titles === null ? (
-            <div className="hide-scrollbar flex gap-4 overflow-x-auto pb-2">
+            <RailScroller>
               {Array.from({ length: 8 }, (_, i) => (
                 <div key={i} className="flex w-36 shrink-0 flex-col gap-1.5">
                   <div className="aspect-2/3 w-full animate-pulse rounded-lg bg-muted" />
                   <div className="h-4 w-3/4 rounded bg-muted" />
                 </div>
               ))}
-            </div>
+            </RailScroller>
           ) : titles.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Nothing listed for this service right now.
             </p>
           ) : (
-            <div className="hide-scrollbar flex gap-4 overflow-x-auto pb-2">
+            <RailScroller>
               {titles.map((title) => {
                 const key = mediaKey(title)
                 return (
@@ -316,7 +319,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                   </div>
                 )
               })}
-            </div>
+            </RailScroller>
           )}
         </div>
       )}
