@@ -57,6 +57,17 @@ User-directed pass on top of session 7.
    Monthly view discussed and parked — week navigation covers it. Smoke-
    tested via `npx convex run` (BB finale week returns "Felina"; empty
    weeks return []) and deployed clean.
+7. **Discover polish** (`eaf00bd`, `7fde8a5`, user-directed): Netflix-style
+   chevron arrows on every card rail for desktop (new `RailScroller` —
+   wired into MediaRow [trending/popular/in-library], the provider title
+   rails and the For You rows; buttons fade out at rail ends, mobile keeps
+   pure swipe). The provider rail now defaults to the first service via a
+   derived `picked ?? first` selection — tile clicks select (no
+   toggle-off). Home mobile: gap below the search bar equalized with the
+   gap below the tab pill (`gap-6 lg:gap-4`). Provider-list curation is
+   pending the user's final pick list (full US movie-provider list pulled
+   from TMDB and reported — duplicates are subscription vs store/channel
+   variants).
 
 **Verified:** typecheck, lint, 13 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
