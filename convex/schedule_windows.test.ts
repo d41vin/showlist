@@ -1,17 +1,18 @@
 import { describe, expect, test } from "vitest"
 
-import { isRecent, isUpcoming, parseDayMs } from "./schedule_windows"
+import { inRange, parseDayMs } from "./schedule_windows"
 
-const TODAY = parseDayMs("2026-10-04")!
+const FROM = parseDayMs("2026-10-19")!
+const TO = parseDayMs("2026-10-25")!
 const DAY = 24 * 60 * 60 * 1000
 
-function offsetDays(days: number) {
-  return TODAY + days * DAY
+function offsetDays(base: number, days: number) {
+  return base + days * DAY
 }
 
 describe("parseDayMs", () => {
   test("parses strict YYYY-MM-DD", () => {
-    expect(parseDayMs("2026-10-04")).toBe(TODAY)
+    expect(parseDayMs("2026-10-19")).toBe(FROM)
   })
   test("rejects null, garbage and non-padded forms", () => {
     expect(parseDayMs(null)).toBeNull()
@@ -22,29 +23,22 @@ describe("parseDayMs", () => {
   })
 })
 
-describe("isUpcoming", () => {
-  test("today counts", () => {
-    expect(isUpcoming(TODAY, TODAY)).toBe(true)
+describe("inRange", () => {
+  test("the first day of the range counts", () => {
+    expect(inRange(FROM, FROM, TO)).toBe(true)
   })
-  test("day 30 counts, day 31 does not", () => {
-    expect(isUpcoming(offsetDays(30), TODAY)).toBe(true)
-    expect(isUpcoming(offsetDays(31), TODAY)).toBe(false)
+  test("the last day of the range counts", () => {
+    expect(inRange(TO, FROM, TO)).toBe(true)
   })
-  test("the past never counts", () => {
-    expect(isUpcoming(offsetDays(-1), TODAY)).toBe(false)
+  test("the day before the range does not", () => {
+    expect(inRange(offsetDays(FROM, -1), FROM, TO)).toBe(false)
   })
-})
-
-describe("isRecent", () => {
-  test("yesterday counts, today does not", () => {
-    expect(isRecent(offsetDays(-1), TODAY)).toBe(true)
-    expect(isRecent(TODAY, TODAY)).toBe(false)
+  test("the day after the range does not", () => {
+    expect(inRange(offsetDays(TO, 1), FROM, TO)).toBe(false)
   })
-  test("8 days back counts, 9 does not", () => {
-    expect(isRecent(offsetDays(-8), TODAY)).toBe(true)
-    expect(isRecent(offsetDays(-9), TODAY)).toBe(false)
-  })
-  test("the future never counts", () => {
-    expect(isRecent(offsetDays(1), TODAY)).toBe(false)
+  test("every day inside a multi-day span counts", () => {
+    for (let day = 0; day <= 6; day++) {
+      expect(inRange(offsetDays(FROM, day), FROM, TO)).toBe(true)
+    }
   })
 })

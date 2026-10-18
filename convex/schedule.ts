@@ -3,19 +3,28 @@ import { v } from "convex/values"
 import { internal } from "./_generated/api"
 import { action } from "./_generated/server"
 import { normalizeDetails, normalizeSeasonEpisodes, tmdbFetch } from "./tmdb"
-import { isRecent, isUpcoming, parseDayMs } from "./schedule_windows"
+import { inRange, parseDayMs } from "./schedule_windows"
 
 // Schedule computation. Reads the SAME cache entries the details drawer
 // writes (details:tv:*), with a stricter freshness rule — air dates must be
-// close to current for the schedule to mean anything. The client passes its
-// local ISO date so "upcoming" and "recent" windows land in the user's own
-// calendar day.
+// close to current for the schedule to mean anything. The client passes the
+// ISO bounds of the week it is viewing (its own local calendar days); the
+// action returns every episode of the user's shows airing inside [from, to].
+//
+// Which seasons can contain range episodes? Episodes air sequentially:
+//   - unaired episodes start at next_episode_to_air, so that season is a
+//     candidate when its next episode airs on or before `to`;
+//   - aired episodes end at last_episode_to_air, so that season is a
+//     candidate when it aired on or after `from`.
+// Browsing far into the past can therefore land in seasons this never
+// fetches (season changes, shows that ended long ago) — those weeks show
+// fewer rows than reality, and the UI words that honestly.
 
 const DETAILS_TTL_MS = 6 * 60 * 60 * 1000
 const SEASON_TTL_MS = 24 * 60 * 60 * 1000
-// Full-season drops (Netflix-style) can put dozens of episodes in the
-// window; the schedule list stays sane with a per-show cap.
-const MAX_UPCOMING_PER_SHOW = 10
+// Full-season drops (Netflix-style) can put a dozen-plus episodes in one
+// week; the week list stays sane with a per-show cap.
+const MAX_EPISODES_PER_SHOW = 20
 const FETCH_CHUNK = 6
 // Hard cap on shows per schedule computation — protects TMDB rate limits
 // and response size.
@@ -29,14 +38,13 @@ const scheduleEpisodeValidator = v.object({
 })
 
 export const get = action({
-  args: { tmdbIds: v.array(v.number()), today: v.string() },
+  args: { tmdbIds: v.array(v.number()), from: v.string(), to: v.string() },
   returns: v.object({
     entries: v.array(
       v.object({
         tmdbId: v.number(),
         status: v.union(v.string(), v.null()),
-        upcoming: v.array(scheduleEpisodeValidator),
-        lastEpisode: v.union(scheduleEpisodeValidator, v.null()),
+        episodes: v.array(scheduleEpisodeValidator),
       })
     ),
     // True when more than SHOW_CAP shows were requested — the rest were
@@ -54,9 +62,10 @@ export const get = action({
     if (ids.length === 0) {
       return { entries: [], truncated: false }
     }
-    const todayMs = parseDayMs(args.today)
-    if (todayMs === null) {
-      throw new Error("Invalid date")
+    const fromMs = parseDayMs(args.from)
+    const toMs = parseDayMs(args.to)
+    if (fromMs === null || toMs === null || fromMs > toMs) {
+      throw new Error("Invalid date range")
     }
 
     // 1. Show summaries — shared cache keys with tmdb.details.
@@ -112,18 +121,32 @@ export const get = action({
       }
     }
 
-    // 3. Which shows have episodes airing in the window? Their active season
-    //    needs an episode list (double-episode weeks, full-season drops).
+    // 3. Which seasons could contain episodes airing in [from, to]? (See
+    //    the header comment for the candidate rules.)
     const seasonNeeds: { tmdbId: number; season: number }[] = []
+    const pushNeed = (tmdbId: number, season: number) => {
+      if (
+        !seasonNeeds.some(
+          (need) => need.tmdbId === tmdbId && need.season === season
+        )
+      ) {
+        seasonNeeds.push({ tmdbId, season })
+      }
+    }
     for (let i = 0; i < ids.length; i++) {
       const summary = summaries[i]
-      if (!summary || summary.nextEpisode === null) continue
-      const airMs = parseDayMs(summary.nextEpisode.airDate)
-      if (airMs !== null && isUpcoming(airMs, todayMs)) {
-        seasonNeeds.push({
-          tmdbId: ids[i],
-          season: summary.nextEpisode.season,
-        })
+      if (!summary) continue
+      if (summary.nextEpisode !== null) {
+        const airMs = parseDayMs(summary.nextEpisode.airDate)
+        if (airMs !== null && airMs <= toMs) {
+          pushNeed(ids[i], summary.nextEpisode.season)
+        }
+      }
+      if (summary.lastEpisode !== null) {
+        const airMs = parseDayMs(summary.lastEpisode.airDate)
+        if (airMs !== null && airMs >= fromMs) {
+          pushNeed(ids[i], summary.lastEpisode.season)
+        }
       }
     }
 
@@ -183,85 +206,46 @@ export const get = action({
       })
     }
 
-    // 4. Build per-show entries: every episode of the active season airing in
-    //    the upcoming window, plus the last aired episode for catch-up.
+    // 4. Build per-show entries: every candidate-season episode airing in
+    //    [from, to].
     const out = []
     for (let i = 0; i < ids.length; i++) {
       const summary = summaries[i]
       if (summary === null) continue
-      const upcoming: {
+      const episodes: {
         season: number
         episode: number
         name: string | null
         airDate: string | null
       }[] = []
-
-      if (summary.nextEpisode !== null) {
-        const next = summary.nextEpisode
-        const needIndex = seasonNeeds.findIndex(
-          (need) => need.tmdbId === ids[i] && need.season === next.season
-        )
-        const seasonData = needIndex !== -1 ? seasonEpisodes[needIndex] : null
-        const candidates =
-          seasonData !== null
-            ? seasonData.episodes
-            : [
-                {
-                  episode: next.episode,
-                  name: next.name,
-                  overview: null,
-                  airDate: next.airDate,
-                  runtime: null,
-                  stillPath: null,
-                },
-              ]
-        for (const ep of candidates) {
+      for (let n = 0; n < seasonNeeds.length; n++) {
+        if (seasonNeeds[n].tmdbId !== ids[i]) continue
+        const seasonData = seasonEpisodes[n]
+        if (seasonData === null) continue
+        for (const ep of seasonData.episodes) {
           const airMs = parseDayMs(ep.airDate)
-          if (airMs === null || !isUpcoming(airMs, todayMs)) {
+          if (airMs === null || !inRange(airMs, fromMs, toMs)) {
             continue
           }
-          upcoming.push({
-            season: next.season,
+          episodes.push({
+            season: seasonNeeds[n].season,
             episode: ep.episode,
             name: ep.name,
             airDate: ep.airDate,
           })
         }
-        upcoming.sort(
-          (a, b) =>
-            (a.airDate ?? "").localeCompare(b.airDate ?? "") ||
-            a.episode - b.episode
-        )
       }
-
-      // Only meaningful while it's still recent — old lastEpisodes are noise
-      // for a schedule.
-      let lastEpisode: {
-        season: number
-        episode: number
-        name: string | null
-        airDate: string | null
-      } | null = null
-      if (summary.lastEpisode !== null) {
-        const airMs = parseDayMs(summary.lastEpisode.airDate)
-        if (airMs !== null && isRecent(airMs, todayMs)) {
-          lastEpisode = {
-            season: summary.lastEpisode.season,
-            episode: summary.lastEpisode.episode,
-            name: summary.lastEpisode.name,
-            airDate: summary.lastEpisode.airDate,
-          }
-        }
-      }
-
-      if (upcoming.length === 0 && lastEpisode === null) {
-        continue
-      }
+      if (episodes.length === 0) continue
+      episodes.sort(
+        (a, b) =>
+          (a.airDate ?? "").localeCompare(b.airDate ?? "") ||
+          a.season - b.season ||
+          a.episode - b.episode
+      )
       out.push({
         tmdbId: ids[i],
         status: summary.status,
-        upcoming: upcoming.slice(0, MAX_UPCOMING_PER_SHOW),
-        lastEpisode,
+        episodes: episodes.slice(0, MAX_EPISODES_PER_SHOW),
       })
     }
     return { entries: out, truncated }

@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button"
 import { ShowCard } from "@/components/show-card"
 import type { CardGridState } from "@/components/use-item-state"
 import { api } from "@/convex/_generated/api"
-import { localTodayISO, mediaKey, type MediaItem } from "@/lib/media"
+import {
+  localDateOffset,
+  localTodayISO,
+  mediaKey,
+  type MediaItem,
+} from "@/lib/media"
 import { cn } from "@/lib/utils"
 
 type Providers = FunctionReturnType<typeof api.tmdb.watchProviders>
@@ -32,19 +37,15 @@ const FEATURED_ORDER = [
   "Crunchyroll",
 ]
 
-// "New season" when a season premiere is in play (upcoming in the next 30
-// days or aired within the last 8), "New episode" for any other airing
-// activity — both derived from the same schedule computation the Schedule
-// tab uses, over the shared tmdbCache.
+// "New season" when a season premiere (E1) airs inside the badge window
+// [today-8, today+30], "New episode" for any other airing activity — both
+// derived from the same range-based schedule computation the Schedule tab
+// uses, over the shared tmdbCache.
 function badgeFor(entry: ScheduleEntry): string | null {
-  const next = entry.upcoming[0]
-  if (
-    (next !== undefined && next.episode === 1) ||
-    (entry.lastEpisode !== null && entry.lastEpisode.episode === 1)
-  ) {
+  if (entry.episodes.some((episode) => episode.episode === 1)) {
     return "New season"
   }
-  if (next !== undefined || entry.lastEpisode !== null) {
+  if (entry.episodes.length > 0) {
     return "New episode"
   }
   return null
@@ -95,7 +96,8 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
     [providers, selected]
   )
   const selectedKey = selected !== null ? `${selected}:${railType}` : null
-  const titles = selectedKey !== null ? (titlesByKey[selectedKey] ?? null) : null
+  const titles =
+    selectedKey !== null ? (titlesByKey[selectedKey] ?? null) : null
 
   useEffect(() => {
     if (selected === null) {
@@ -147,9 +149,11 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
       return
     }
     let cancelled = false
+    const today = localTodayISO()
     scheduleGet({
       tmdbIds: tvIdsKey.split(",").map(Number),
-      today: localTodayISO(),
+      from: localDateOffset(today, -8),
+      to: localDateOffset(today, 30),
     })
       .then((result) => {
         if (cancelled) {

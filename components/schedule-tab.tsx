@@ -1,6 +1,11 @@
 "use client"
 
-import { ImageNotFound01Icon, RefreshIcon } from "@hugeicons/core-free-icons"
+import {
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  ImageNotFound01Icon,
+  RefreshIcon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction, useMutation, useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
@@ -14,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
 import {
   localTodayISO,
+  localWeekRange,
   tmdbPosterThumbUrl,
   type CollectionSummary,
   type ItemState,
@@ -39,11 +45,12 @@ type Row = {
   watched: boolean
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000
-
-// The Schedule tab: upcoming + recently-aired episodes for EVERY TV show in
+// The Schedule tab: a weekly view of episodes airing for EVERY TV show in
 // the library, regardless of status — a show marked watched whose new season
 // starts airing keeps appearing here. That's the point of the feature.
+// Weeks run Monday–Sunday; navigation is free in both directions. Past weeks
+// render whatever the active-season data covers, and the empty state says so
+// honestly.
 export function ScheduleTab({
   isAuthenticated,
   myItems,
@@ -71,6 +78,12 @@ export function ScheduleTab({
   const stateByKey = useItemStateMap(isAuthenticated)
   const collections = useCollectionSummaries(isAuthenticated)
 
+  // 0 = the week containing today; negative = past weeks. Weeks are
+  // Monday-start and computed against the user's local calendar.
+  const [weekOffset, setWeekOffset] = useState(0)
+  const { from, to } = useMemo(() => localWeekRange(weekOffset), [weekOffset])
+  const today = useMemo(() => localTodayISO(), [])
+
   const [entries, setEntries] = useState<ScheduleEntry[] | null>(null)
   const [truncated, setTruncated] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -82,7 +95,7 @@ export function ScheduleTab({
       return
     }
     let cancelled = false
-    scheduleGet({ tmdbIds, today: localTodayISO() })
+    scheduleGet({ tmdbIds, from, to })
       .then((result) => {
         if (!cancelled) {
           setEntries(result.entries)
@@ -97,7 +110,7 @@ export function ScheduleTab({
     return () => {
       cancelled = true
     }
-  }, [isAuthenticated, tmdbIdsKey, scheduleGet, retryNonce])
+  }, [isAuthenticated, tmdbIdsKey, scheduleGet, retryNonce, from, to])
 
   const watchedKeys = useMemo(() => {
     const keys = new Set<string>()
@@ -117,17 +130,16 @@ export function ScheduleTab({
     return map
   }, [tvItems])
 
-  // Group episodes by air date, upcoming first, then catch-up.
-  const { upcomingGroups, recentGroups } = useMemo(() => {
-    const today = localTodayISO()
-    const upcoming = new Map<string, Row[]>()
-    const recent = new Map<string, Row[]>()
+  // Group the week's episodes by air date, Monday → Sunday. Rows within a
+  // day sort by show title.
+  const groups = useMemo(() => {
+    const byDate = new Map<string, Row[]>()
     for (const entry of entries ?? []) {
       const item = itemsByTmdbId.get(entry.tmdbId)
       if (item === undefined) continue
-      for (const episode of entry.upcoming) {
+      for (const episode of entry.episodes) {
         if (episode.airDate === null) continue
-        pushToMap(upcoming, episode.airDate, {
+        pushToMap(byDate, episode.airDate, {
           key: `${entry.tmdbId}:${episode.season}:${episode.episode}`,
           item,
           season: episode.season,
@@ -139,25 +151,14 @@ export function ScheduleTab({
           ),
         })
       }
-      const last = entry.lastEpisode
-      if (last !== null && last.airDate !== null) {
-        pushToMap(recent, last.airDate, {
-          key: `${entry.tmdbId}:last:${last.season}:${last.episode}`,
-          item,
-          season: last.season,
-          episode: last.episode,
-          name: last.name,
-          airDate: last.airDate,
-          watched: watchedKeys.has(
-            `${entry.tmdbId}:${last.season}:${last.episode}`
-          ),
-        })
-      }
     }
-    const upcomingGroups = sortedGroups(upcoming, today, 1)
-    const recentGroups = sortedGroups(recent, today, -1)
-    return { upcomingGroups, recentGroups }
-  }, [entries, itemsByTmdbId, watchedKeys])
+    return [...byDate.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([airDate, rows]) => {
+        rows.sort((a, b) => a.item.title.localeCompare(b.item.title))
+        return { label: dayLabel(airDate, today), rows }
+      })
+  }, [entries, itemsByTmdbId, watchedKeys, today])
 
   const loading =
     myItems === undefined || (tvItems.length > 0 && entries === null && !failed)
@@ -190,37 +191,72 @@ export function ScheduleTab({
   if (loading) {
     return <ScheduleSkeleton />
   }
-  if (upcomingGroups.length === 0 && recentGroups.length === 0) {
-    return (
-      <p className="py-16 text-center text-sm text-muted-foreground">
-        Nothing airing in the next 30 days for your shows. Episodes that aired
-        recently show up here too, so you can catch up.
-      </p>
-    )
-  }
+
+  const isPastWeek = to < today
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-8">
+    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+      <div className="flex flex-col items-center gap-1">
+        <div className="flex w-full items-center justify-between">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Previous week"
+            onClick={() => setWeekOffset((w) => w - 1)}
+          >
+            <HugeiconsIcon icon={ArrowLeft01Icon} />
+          </Button>
+          <p className="text-sm font-medium">
+            {weekRangeLabel(from, to, today)}
+          </p>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Next week"
+            onClick={() => setWeekOffset((w) => w + 1)}
+          >
+            <HugeiconsIcon icon={ArrowRight01Icon} />
+          </Button>
+        </div>
+        {weekOffset !== 0 && (
+          <button
+            type="button"
+            onClick={() => setWeekOffset(0)}
+            className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Back to this week
+          </button>
+        )}
+      </div>
       {truncated && (
         <p className="text-xs text-muted-foreground">
           Showing the first 200 shows — trim your lists to see more.
         </p>
       )}
-      <ScheduleSection
-        title="Upcoming"
-        groups={upcomingGroups}
-        onToggle={onToggle}
-        stateByKey={stateByKey}
-        collections={collections}
-      />
-      {recentGroups.length > 0 && (
-        <ScheduleSection
-          title="Catch up"
-          groups={recentGroups}
-          onToggle={onToggle}
-          stateByKey={stateByKey}
-          collections={collections}
-        />
+      {groups.length === 0 ? (
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          {isPastWeek
+            ? "Nothing from your shows aired this week. Weeks further back can be incomplete — a show's full episode list lives in its details view."
+            : "Nothing airs this week from your shows. Episodes from every TV show in your library appear here — flip forward to see upcoming weeks."}
+        </p>
+      ) : (
+        groups.map((group) => (
+          <div key={group.label} className="flex flex-col gap-1">
+            <h3 className="text-sm font-semibold">{group.label}</h3>
+            {group.rows.map((row) => (
+              <ScheduleRow
+                key={row.key}
+                row={row}
+                onToggle={onToggle}
+                state={stateByKey.get(
+                  `${row.item.mediaType}:${row.item.tmdbId}`
+                )}
+                stateByKey={stateByKey}
+                collections={collections}
+              />
+            ))}
+          </div>
+        ))
       )}
     </div>
   )
@@ -240,41 +276,6 @@ export function ScheduleTab({
   }
 }
 
-function ScheduleSection({
-  title,
-  groups,
-  onToggle,
-  stateByKey,
-  collections,
-}: {
-  title: string
-  groups: { label: string; rows: Row[] }[]
-  onToggle: (row: Row) => void
-  stateByKey: Map<string, ItemState>
-  collections: CollectionSummary[]
-}) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-muted-foreground">{title}</h2>
-      {groups.map((group) => (
-        <div key={`${title}-${group.label}`} className="flex flex-col gap-1">
-          <h3 className="text-sm font-semibold">{group.label}</h3>
-          {group.rows.map((row) => (
-            <ScheduleRow
-              key={row.key}
-              row={row}
-              onToggle={onToggle}
-              state={stateByKey.get(`${row.item.mediaType}:${row.item.tmdbId}`)}
-              stateByKey={stateByKey}
-              collections={collections}
-            />
-          ))}
-        </div>
-      ))}
-    </section>
-  )
-}
-
 function pushToMap(map: Map<string, Row[]>, airDate: string, row: Row) {
   const rows = map.get(airDate)
   if (rows === undefined) {
@@ -284,38 +285,35 @@ function pushToMap(map: Map<string, Row[]>, airDate: string, row: Row) {
   }
 }
 
-// Groups sorted by date; direction 1 = future (soonest first), -1 = past
-// (most recent first). Rows within a day sort by show title.
-function sortedGroups(
-  map: Map<string, Row[]>,
-  today: string,
-  direction: 1 | -1
-) {
-  return [...map.entries()]
-    .sort((a, b) => direction * a[0].localeCompare(b[0]))
-    .map(([airDate, rows]) => {
-      rows.sort((a, b) => a.item.title.localeCompare(b.item.title))
-      return { label: dayLabel(airDate, today), rows }
-    })
-}
-
+// Week-view day heading: "Today", else "Monday · Oct 19".
 function dayLabel(airDate: string, today: string) {
   if (airDate === today) return "Today"
-  const nowMs = Date.parse(`${today}T00:00:00Z`)
-  const diffDays = Math.round(
-    (Date.parse(`${airDate}T00:00:00Z`) - nowMs) / DAY_MS
-  )
-  if (diffDays === 1) return "Tomorrow"
-  if (diffDays === -1) return "Yesterday"
   const date = new Date(`${airDate}T00:00:00`)
-  if (diffDays > 1 && diffDays <= 7) {
-    return date.toLocaleDateString("en-US", { weekday: "long" })
-  }
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
+  if (Number.isNaN(date.getTime())) return airDate
+  const weekday = date.toLocaleDateString("en-US", { weekday: "long" })
+  const day = date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
   })
+  return `${weekday} · ${day}`
+}
+
+// "Oct 19 – 25" / "Oct 27 – Nov 2"; the year suffix appears when the week
+// doesn't sit inside today's year ("Dec 29 – Jan 4, 2027").
+function weekRangeLabel(from: string, to: string, today: string) {
+  const monthDay = (iso: string) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    })
+  const sameMonth = from.slice(0, 7) === to.slice(0, 7)
+  const needsYear =
+    from.slice(0, 4) !== today.slice(0, 4) ||
+    to.slice(0, 4) !== today.slice(0, 4)
+  const range = sameMonth
+    ? `${monthDay(from)} – ${to.slice(8)}`
+    : `${monthDay(from)} – ${monthDay(to)}`
+  return needsYear ? `${range}, ${to.slice(0, 4)}` : range
 }
 
 function ScheduleRow({
