@@ -10,11 +10,10 @@ import type { Metadata } from "next"
 import { Geist_Mono, Inter } from "next/font/google"
 
 import "@/styles/globals.css"
-import { AiSettingsButton } from "@/components/ai-settings-dialog"
 import { AppHeader } from "@/components/app-header"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
+import { SettingsMenu } from "@/components/settings-menu"
 import { ThemeProvider } from "@/components/theme-provider"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -58,7 +57,7 @@ export default function RootLayout({
                 <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-6">
                   <AppHeader />
                   <div className="flex items-center gap-2">
-                    <ThemeToggle />
+                    <SettingsMenu />
                     <Show when="signed-out">
                       <SignInButton>
                         <Button variant="ghost" size="sm">
@@ -70,7 +69,6 @@ export default function RootLayout({
                       </SignUpButton>
                     </Show>
                     <Show when="signed-in">
-                      <AiSettingsButton />
                       <UserButton />
                     </Show>
                   </div>
