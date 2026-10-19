@@ -114,28 +114,34 @@ export function ShowCard({
                 {badge}
               </span>
             )}
-            {/* Action overlay: hover-revealed on desktop. Clicks here are
-                quick actions, not "open details". */}
+            {/* Action overlay: hover-revealed on desktop. The overlay never
+                captures pointer events — clicks between the buttons pass
+                through to the card and open the drawer; only the buttons
+                themselves are interactive quick actions. */}
             <div
               className={cn(
-                "absolute inset-0 flex flex-col justify-center gap-1.5 bg-black/70 p-3 transition-opacity",
+                "pointer-events-none absolute inset-0 flex flex-col justify-center gap-1.5 bg-black/70 p-3 transition-opacity",
                 overlayOpen
                   ? "opacity-100"
-                  : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+                  : "opacity-0 group-hover:opacity-100"
               )}
-              onClick={(e) => e.stopPropagation()}
             >
-              <ItemActions
-                item={item}
-                state={state}
-                collections={collections}
-              />
+              <div
+                className="pointer-events-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ItemActions
+                  item={item}
+                  state={state}
+                  collections={collections}
+                />
+              </div>
             </div>
           </div>
           <div className="min-w-0">
             <button
               type="button"
-              className="block w-full truncate text-left text-sm font-medium hover:underline"
+              className="block w-full cursor-pointer truncate text-left text-sm font-medium hover:underline"
             >
               {item.title}
             </button>

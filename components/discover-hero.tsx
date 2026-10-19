@@ -100,10 +100,7 @@ export function DiscoverHero({
             className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"
           />
 
-          <div
-            className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 p-5 sm:p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 p-5 sm:p-6">
             {data !== null ? (
               <>
                 {data.logoPath ? (
@@ -127,7 +124,10 @@ export function DiscoverHero({
                     {data.overview}
                   </p>
                 )}
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <div
+                  className="mt-1 flex flex-wrap items-center gap-1.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <ItemActions
                     item={item}
                     state={gridState.stateByKey.get(
