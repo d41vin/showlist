@@ -103,6 +103,15 @@ User-directed pass on top of session 7.
    hosted clean crop (public/providers/paramount-plus.png). Settings
    popover replaces the separate theme toggle + AI settings buttons in the
    header (`components/settings-menu.tsx`; theme-toggle.tsx deleted).
+11. **Card = details affordance** (user-directed, option A of the kebab UX
+   discussion): clicking a ShowCard's poster or title opens the details
+   drawer — the kebab button is gone. The hover overlay now carries only
+   quick actions and stops propagation; on touch, a tap opens the drawer
+   (full action row inside). The `overlayOpen` prop plumbing is kept but
+   inert (the overlay is purely hover-driven) — cleanup candidate.
+   Terminology of record: the drawer is DetailsDrawer ("details drawer"),
+   the poster tile is ShowCard ("card"), the hover layer is the "card
+   action overlay".
 
 **Verified:** typecheck, lint, 12 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
