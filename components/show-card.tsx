@@ -24,6 +24,11 @@ function isInLayer(target: EventTarget | null) {
   return target instanceof Element && target.closest(LAYER_SELECTOR) !== null
 }
 
+// The card IS the details affordance (the Netflix/Disney pattern): clicking
+// the poster or the title opens the details drawer. The hover overlay
+// carries only the quick actions and stops propagation so those clicks
+// don't also open the drawer. On touch there is no hover — a tap opens the
+// drawer, whose body holds the full action row.
 export function ShowCard({
   item,
   state,
@@ -39,8 +44,10 @@ export function ShowCard({
   // real saved state.
   stateByKey?: Map<string, ItemState>
   collections: CollectionSummary[]
-  overlayOpen: boolean
-  onOverlayOpenChange: (open: boolean) => void
+  // Inert since the card click became the drawer trigger; the hover overlay
+  // is purely hover-driven now. Kept so callers don't have to change yet.
+  overlayOpen?: boolean
+  onOverlayOpenChange?: (open: boolean) => void
   // Optional status chip on the poster (e.g. "New episode" on rail cards).
   badge?: string
 }) {
@@ -57,7 +64,7 @@ export function ShowCard({
         !rootRef.current?.contains(e.target as Node) &&
         !isInLayer(e.target)
       ) {
-        onOverlayOpenChange(false)
+        onOverlayOpenChange?.(false)
       }
     }
     const onKeyDown = (e: KeyboardEvent) => {
@@ -65,7 +72,7 @@ export function ShowCard({
         e.key === "Escape" &&
         document.querySelector(LAYER_SELECTOR) === null
       ) {
-        onOverlayOpenChange(false)
+        onOverlayOpenChange?.(false)
       }
     }
     document.addEventListener("pointerdown", onPointerDown)
@@ -77,57 +84,71 @@ export function ShowCard({
   }, [overlayOpen, onOverlayOpenChange])
 
   return (
-    <div ref={rootRef} className="group flex flex-col gap-1.5">
-      <div
-        className="relative aspect-2/3 cursor-pointer overflow-hidden rounded-lg bg-muted"
-        onClick={() => onOverlayOpenChange(true)}
-      >
-        {item.posterPath ? (
-          <Image
-            src={tmdbPosterUrl(item.posterPath)}
-            alt={`${item.title} poster`}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 16vw"
-            className="object-cover"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            <HugeiconsIcon icon={ImageNotFound01Icon} className="size-8" />
-          </div>
-        )}
-        {badge && (
-          <span className="absolute top-1.5 left-1.5 rounded-full bg-background/85 px-2 py-0.5 text-[11px] font-medium backdrop-blur">
-            {badge}
-          </span>
-        )}
-        {/* Action overlay: hover-revealed on desktop, persistent when opened. */}
+    <DetailsDrawer
+      item={item}
+      state={state}
+      stateByKey={stateByKey}
+      collections={collections}
+      trigger={(onOpen) => (
         <div
-          className={cn(
-            "absolute inset-0 flex flex-col justify-center gap-1.5 bg-black/70 p-3 transition-opacity",
-            overlayOpen
-              ? "opacity-100"
-              : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
-          )}
+          ref={rootRef}
+          className="group flex cursor-pointer flex-col gap-1.5"
+          onClick={onOpen}
         >
-          <ItemActions item={item} state={state} collections={collections} />
+          <div className="relative aspect-2/3 overflow-hidden rounded-lg bg-muted">
+            {item.posterPath ? (
+              <Image
+                src={tmdbPosterUrl(item.posterPath)}
+                alt={`${item.title} poster`}
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 16vw"
+                className="object-cover"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-muted-foreground">
+                <HugeiconsIcon icon={ImageNotFound01Icon} className="size-8" />
+              </div>
+            )}
+            {badge && (
+              <span className="absolute top-1.5 left-1.5 rounded-full bg-background/85 px-2 py-0.5 text-[11px] font-medium backdrop-blur">
+                {badge}
+              </span>
+            )}
+            {/* Action overlay: hover-revealed on desktop. Clicks here are
+                quick actions, not "open details". */}
+            <div
+              className={cn(
+                "absolute inset-0 flex flex-col justify-center gap-1.5 bg-black/70 p-3 transition-opacity",
+                overlayOpen
+                  ? "opacity-100"
+                  : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ItemActions
+                item={item}
+                state={state}
+                collections={collections}
+              />
+            </div>
+          </div>
+          <div className="min-w-0">
+            <button
+              type="button"
+              className="block w-full truncate text-left text-sm font-medium hover:underline"
+            >
+              {item.title}
+            </button>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>{item.mediaType === "movie" ? "Movie" : "Show"}</span>
+              <span aria-hidden className="text-border">
+                |
+              </span>
+              <span>{item.year ?? "—"}</span>
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{item.title}</p>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span>{item.mediaType === "movie" ? "Movie" : "Show"}</span>
-          <span aria-hidden className="text-border">
-            |
-          </span>
-          <span>{item.year ?? "—"}</span>
-          <DetailsDrawer
-            item={item}
-            state={state}
-            stateByKey={stateByKey}
-            collections={collections}
-          />
-        </div>
-      </div>
-    </div>
+      )}
+    />
   )
 }
