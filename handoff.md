@@ -124,6 +124,12 @@ User-directed pass on top of session 7.
    URL — the bare hash path resolved against localhost), Paramount back to
    TMDB's Premium-tier artwork, order now Apple TV → Amazon Prime Video →
    the rest alphabetically.
+13. **Uniform rail behavior** (user-directed): every RailScroller now shows
+   pagination dashes (default on) and supports mouse grab-drag; the hero
+   gained a page-flip drag (mandatory snap made short drags rubber-band
+   back — a >10% drag now flips a full page). Arrows fade out at the ends
+   on ALL rails, hero included — the wrap-jump is gone; autoplay (hero
+   only) remains ping-pong. `loop` prop removed.
 
 **Verified:** typecheck, lint, 12 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
