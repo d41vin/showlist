@@ -15,8 +15,11 @@ export function tmdbPosterUrl(posterPath: string) {
   return `https://image.tmdb.org/t/p/w342${posterPath}`
 }
 
-export function tmdbBackdropUrl(backdropPath: string) {
-  return `https://image.tmdb.org/t/p/w780${backdropPath}`
+export function tmdbBackdropUrl(
+  backdropPath: string,
+  size: "w780" | "w1280" | "original" = "w780"
+) {
+  return `https://image.tmdb.org/t/p/${size}${backdropPath}`
 }
 
 export function tmdbLogoUrl(logoPath: string) {

@@ -596,7 +596,11 @@ function DiscoverContent() {
                 {/* Billboard strip: the top five trending titles as
                     full-width hero pages — swipe on touch, chevrons on
                     desktop, snap-locked. */}
-                <RailScroller className="snap-x snap-mandatory">
+                <RailScroller
+                  className="snap-x snap-mandatory"
+                  loop
+                  autoAdvanceMs={8000}
+                >
                   {heroItems.map((item, index) => (
                     <div
                       key={`${item.mediaType}:${item.tmdbId}`}

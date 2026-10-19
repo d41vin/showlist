@@ -2,27 +2,38 @@
 
 import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { cn } from "@/lib/utils"
 
 // Netflix-style horizontal rail: content scrolls natively (touch swipe,
 // trackpad) with the scrollbar hidden, and desktop gets chevron buttons at
 // the edges for mouse-driven paging. The buttons sit in the page gutter so
-// they barely cover the cards, and disable (fade out) at either end of the
-// rail. Mobile keeps pure swipe — the chevrons only render from lg up.
+// they barely cover the cards. Mobile keeps pure swipe — the chevrons only
+// render from lg up.
+//
 // `className` extends the inner scroller (e.g. snap classes for paging
-// rails like the hero).
+// rails). `loop` keeps both chevrons enabled and wraps at the ends. When
+// `autoAdvanceMs` is set the rail advances one page on that interval while
+// untouched, unhovered and tab-visible — the first pointer/wheel/key
+// interaction stops the autoplay for good (the Netflix billboarding rule).
 export function RailScroller({
   children,
   className,
+  loop = false,
+  autoAdvanceMs,
 }: {
   children: React.ReactNode
   className?: string
+  loop?: boolean
+  autoAdvanceMs?: number
 }) {
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const railRef = useRef<HTMLDivElement>(null)
   const [atStart, setAtStart] = useState(true)
   const [atEnd, setAtEnd] = useState(true)
+  const hoveredRef = useRef(false)
+  const interactedRef = useRef(false)
 
   const updateEnds = useCallback(() => {
     const el = railRef.current
@@ -42,17 +53,83 @@ export function RailScroller({
     return () => observer.disconnect()
   }, [updateEnds])
 
+  const scrollBehavior: ScrollBehavior = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    []
+  )
+
   const nudge = (direction: 1 | -1) => {
     const el = railRef.current
     if (el === null) return
-    el.scrollBy({ left: direction * el.clientWidth * 0.85, behavior: "smooth" })
+    if (loop && direction === 1 && atEnd) {
+      el.scrollTo({ left: 0, behavior: scrollBehavior })
+    } else if (loop && direction === -1 && atStart) {
+      el.scrollTo({ left: el.scrollWidth, behavior: scrollBehavior })
+    } else {
+      el.scrollBy({
+        left: direction * el.clientWidth * 0.85,
+        behavior: scrollBehavior,
+      })
+    }
   }
+
+  // Billboard autoplay — see the header comment. Skipped entirely for
+  // reduced-motion users (scrollBehavior "auto" is the tell).
+  useEffect(() => {
+    if (autoAdvanceMs === undefined || scrollBehavior !== "smooth") {
+      return
+    }
+    const timer = window.setInterval(() => {
+      const el = railRef.current
+      if (
+        el === null ||
+        document.hidden ||
+        hoveredRef.current ||
+        interactedRef.current
+      ) {
+        return
+      }
+      if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 1) {
+        el.scrollTo({ left: 0, behavior: "smooth" })
+      } else {
+        el.scrollBy({ left: el.clientWidth, behavior: "smooth" })
+      }
+    }, autoAdvanceMs)
+    const wrapper = wrapperRef.current
+    const markInteracted = () => {
+      interactedRef.current = true
+    }
+    wrapper?.addEventListener("pointerdown", markInteracted)
+    wrapper?.addEventListener("wheel", markInteracted, { passive: true })
+    wrapper?.addEventListener("touchstart", markInteracted, { passive: true })
+    wrapper?.addEventListener("keydown", markInteracted)
+    return () => {
+      window.clearInterval(timer)
+      wrapper?.removeEventListener("pointerdown", markInteracted)
+      wrapper?.removeEventListener("wheel", markInteracted)
+      wrapper?.removeEventListener("touchstart", markInteracted)
+      wrapper?.removeEventListener("keydown", markInteracted)
+    }
+  }, [autoAdvanceMs, scrollBehavior])
 
   const arrowClass =
     "absolute top-1/2 z-10 hidden size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border bg-background/90 shadow-sm backdrop-blur transition-opacity hover:bg-accent disabled:pointer-events-none disabled:opacity-0 lg:flex"
 
   return (
-    <div className="group/rail relative">
+    <div
+      ref={wrapperRef}
+      onMouseEnter={() => {
+        hoveredRef.current = true
+      }}
+      onMouseLeave={() => {
+        hoveredRef.current = false
+      }}
+      className="group/rail relative"
+    >
       <div
         ref={railRef}
         onScroll={updateEnds}
@@ -66,7 +143,7 @@ export function RailScroller({
       <button
         type="button"
         aria-label="Scroll left"
-        disabled={atStart}
+        disabled={loop ? false : atStart}
         onClick={() => nudge(-1)}
         className={cn(arrowClass, "-left-4")}
       >
@@ -75,7 +152,7 @@ export function RailScroller({
       <button
         type="button"
         aria-label="Scroll right"
-        disabled={atEnd}
+        disabled={loop ? false : atEnd}
         onClick={() => nudge(1)}
         className={cn(arrowClass, "-right-4")}
       >
