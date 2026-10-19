@@ -30,13 +30,13 @@ type ScheduleEntry = FunctionReturnType<
   typeof api.schedule.get
 >["entries"][number]
 
-// The curated streaming services — exactly these, alphabetically. Ids are
-// TMDB watch-provider ids (US region). TMDB data quirks handled here: HBO
-// Max exists as a standalone TV provider (1899) but only as its Amazon
-// Channel (1825) for movies, so the two types filter by different ids;
-// Paramount+ splits into tiers — we filter by the Premium tier (2303) but
-// show a clean logo (the tier caption cropped off TMDB's artwork, hosted
-// locally). Display names are ours where TMDB's are clunky.
+// The curated streaming services — Apple TV first, Amazon Prime Video
+// second, then the rest alphabetically. Ids are TMDB watch-provider ids
+// (US region). TMDB data quirks handled here: HBO Max exists as a
+// standalone TV provider (1899) but only as its Amazon Channel (1825) for
+// movies, so the two types filter by different ids; its clean logo comes
+// from that TV entry (full URL override). Paramount+ filters by the
+// Premium tier (2303) and keeps TMDB's tiered artwork.
 const CURATED_PROVIDERS: {
   id: number
   displayName?: string
@@ -44,22 +44,19 @@ const CURATED_PROVIDERS: {
   tvId?: number
   logoOverride?: string
 }[] = [
-  { id: 9 }, // Amazon Prime Video
   { id: 350 }, // Apple TV (the Apple TV+ subscription service)
+  { id: 9 }, // Amazon Prime Video
   { id: 337 }, // Disney Plus
   {
     id: 1899,
     displayName: "HBO Max",
     movieId: 1825,
     tvId: 1899,
-    logoOverride: "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+    logoOverride:
+      "https://image.tmdb.org/t/p/w154/skypuy7SXuugIQeYg0IglmzoKaS.png",
   },
   { id: 8 }, // Netflix
-  {
-    id: 2303,
-    displayName: "Paramount+",
-    logoOverride: "/providers/paramount-plus.png",
-  },
+  { id: 2303, displayName: "Paramount+" },
 ]
 
 type ProviderSort = "newest" | "popularity" | "rating"
