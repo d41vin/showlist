@@ -112,6 +112,18 @@ User-directed pass on top of session 7.
    Terminology of record: the drawer is DetailsDrawer ("details drawer"),
    the poster tile is ShowCard ("card"), the hover layer is the "card
    action overlay".
+12. **Click-area + hero polish** (`ee357b1`, `95234ae`, `dd00d41`, user-directed):
+   fixed the click dead zones — the hero blocked clicks on its whole text
+   block (now only the action row does) and the card overlay swallowed
+   clicks between buttons (overlay is pointer-events-none; only the action
+   row captures). Hero pagination dashes (clickable, track active slide).
+   Autoplay ping-pongs at the ends (1→…→N→N-1→…) instead of an animated
+   rewind; arrows still wrap. Mouse drag-to-scroll on every rail (5px
+   threshold; post-drag clicks suppressed via pointer capture so drawers
+   don't open on release). Provider rail: HBO Max logo fixed (full TMDB
+   URL — the bare hash path resolved against localhost), Paramount back to
+   TMDB's Premium-tier artwork, order now Apple TV → Amazon Prime Video →
+   the rest alphabetically.
 
 **Verified:** typecheck, lint, 12 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
