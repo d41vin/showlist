@@ -9,30 +9,31 @@ import { cn } from "@/lib/utils"
 // Netflix-style horizontal rail: content scrolls natively (touch swipe,
 // trackpad) with the scrollbar hidden, and desktop gets chevron buttons at
 // the edges for mouse-driven paging. Mouse users can also grab and drag the
-// rail itself — a 5px threshold keeps ordinary clicks untouched. The
-// buttons sit in the page gutter so they barely cover the cards. Mobile
-// keeps pure swipe — the chevrons only render from lg up.
+// rail itself — a 5px threshold keeps ordinary clicks untouched; on `paged`
+// rails (the hero) a deliberate drag flips a whole page instead of
+// rubber-banding back. Buttons sit in the page gutter and fade out at the
+// ends — no wrap-jump. Mobile keeps pure swipe — chevrons only render from
+// lg up.
 //
 // `className` extends the inner scroller (e.g. snap classes for paging
-// rails). `loop` keeps both chevrons enabled and wraps at the ends.
-// `pagination` renders clickable dashes below the rail that track the
-// active page. When `autoAdvanceMs` is set, the rail advances one page on
-// that interval while untouched, unhovered and tab-visible — ping-ponging
-// at the ends (1→2→…→N→N-1→…) instead of an animated rewind. The first
-// pointer/wheel/key interaction stops the autoplay for good (the Netflix
-// billboarding rule).
+// rails). `pagination` (on by default) renders clickable dashes below the
+// rail that track the active page. When `autoAdvanceMs` is set, the rail
+// advances one page on that interval while untouched, unhovered and
+// tab-visible — ping-ponging at the ends (1→2→…→N→N-1→…) instead of an
+// animated rewind. The first pointer/wheel/key interaction stops the
+// autoplay for good (the Netflix billboarding rule).
 export function RailScroller({
   children,
   className,
-  loop = false,
   autoAdvanceMs,
-  pagination = false,
+  pagination = true,
+  paged = false,
 }: {
   children: React.ReactNode
   className?: string
-  loop?: boolean
   autoAdvanceMs?: number
   pagination?: boolean
+  paged?: boolean
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const railRef = useRef<HTMLDivElement>(null)
@@ -48,6 +49,7 @@ export function RailScroller({
     startScroll: number
     pointerId: number
     dragged: boolean
+    lastDx: number
   } | null>(null)
 
   const scrollBehavior: ScrollBehavior = useMemo(
@@ -85,16 +87,10 @@ export function RailScroller({
   const nudge = (direction: 1 | -1) => {
     const el = railRef.current
     if (el === null) return
-    if (loop && direction === 1 && atEnd) {
-      el.scrollTo({ left: 0, behavior: scrollBehavior })
-    } else if (loop && direction === -1 && atStart) {
-      el.scrollTo({ left: el.scrollWidth, behavior: scrollBehavior })
-    } else {
-      el.scrollBy({
-        left: direction * el.clientWidth * 0.85,
-        behavior: scrollBehavior,
-      })
-    }
+    el.scrollBy({
+      left: direction * el.clientWidth * 0.85,
+      behavior: scrollBehavior,
+    })
   }
 
   // Billboard autoplay — see the header comment. Skipped entirely for
@@ -154,6 +150,7 @@ export function RailScroller({
       startScroll: el.scrollLeft,
       pointerId: e.pointerId,
       dragged: false,
+      lastDx: 0,
     }
   }
   const onPointerMove = (e: React.PointerEvent) => {
@@ -161,6 +158,7 @@ export function RailScroller({
     const el = railRef.current
     if (drag === null || el === null || drag.pointerId !== e.pointerId) return
     const dx = e.clientX - drag.startX
+    drag.lastDx = dx
     if (!drag.dragged && Math.abs(dx) > 5) {
       drag.dragged = true
       el.setPointerCapture(e.pointerId)
@@ -170,8 +168,22 @@ export function RailScroller({
       el.scrollLeft = drag.startScroll - dx
     }
   }
+  // On paged rails a deliberate drag flips a whole page — mandatory snap
+  // alone would rubber-band short drags back to the current slide.
   const onPointerEnd = () => {
+    const drag = dragRef.current
+    const el = railRef.current
     dragRef.current = null
+    if (drag === null || el === null || !drag.dragged || !paged) return
+    const pageWidth = el.clientWidth
+    if (Math.abs(drag.lastDx) < pageWidth * 0.1) return
+    const base = Math.round(drag.startScroll / pageWidth) * pageWidth
+    const target = base + (drag.lastDx < 0 ? pageWidth : -pageWidth)
+    const max = el.scrollWidth - el.clientWidth
+    el.scrollTo({
+      left: Math.max(0, Math.min(max, target)),
+      behavior: scrollBehavior,
+    })
   }
 
   const arrowClass =
@@ -206,7 +218,7 @@ export function RailScroller({
       <button
         type="button"
         aria-label="Scroll left"
-        disabled={loop ? false : atStart}
+        disabled={atStart}
         onClick={() => nudge(-1)}
         className={cn(arrowClass, "-left-4")}
       >
@@ -215,7 +227,7 @@ export function RailScroller({
       <button
         type="button"
         aria-label="Scroll right"
-        disabled={loop ? false : atEnd}
+        disabled={atEnd}
         onClick={() => nudge(1)}
         className={cn(arrowClass, "-right-4")}
       >

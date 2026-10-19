@@ -598,9 +598,8 @@ function DiscoverContent() {
                     desktop, snap-locked. */}
                 <RailScroller
                   className="snap-x snap-mandatory"
-                  loop
                   autoAdvanceMs={8000}
-                  pagination
+                  paged
                 >
                   {heroItems.map((item, index) => (
                     <div
