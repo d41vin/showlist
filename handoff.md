@@ -89,8 +89,22 @@ User-directed pass on top of session 7.
    until hover/selection. Provider sort order confirmed: TMDB discover
    `sort_by=popularity.desc` filtered by watch provider — popularity, not
    recency or trending.
+10. **Hero + streaming polish** (`2a85c50`, `aa615c3`, `17cee28`, user-directed):
+   hero backdrops now request w1280 (was w780 — the low-quality look was
+   our request size, not TMDB's source). The hero strip autoplays one page
+   every 8s while unhovered/visible, stops for good on first interaction
+   (Netflix rule), skips autoplay under prefers-reduced-motion, and `loop`
+   wraps both chevrons at the ends. The whole hero is clickable → details
+   drawer (action row stops propagation; focusable with Enter/Space).
+   Provider rail: sort Select (Newest default / Most popular / Top rated),
+   curated list alphabetical, ring clipping fixed with a p-1 gutter, dim
+   75%, HBO Max now uses the clean standalone TV-provider logo (1899) with
+   per-type filter ids (movies 1825, TV 1899), Paramount+ shows a locally
+   hosted clean crop (public/providers/paramount-plus.png). Settings
+   popover replaces the separate theme toggle + AI settings buttons in the
+   header (`components/settings-menu.tsx`; theme-toggle.tsx deleted).
 
-**Verified:** typecheck, lint, 13 vitest tests, build all clean. Signed-in UI
+**Verified:** typecheck, lint, 12 vitest tests, build all clean. Signed-in UI
 awaits user testing on the dev server (:3000).
 
 ## Previous status
