@@ -126,9 +126,10 @@ User-directed pass on top of session 7.
    rest alphabetically.
 14. **Edge control never disappears** (user feedback on the fade-out): the
    right-hand control stays visible on every rail — at the end it flips to
-   a rewind (double-left chevron, "Rewind one page") so manual ping-pong
-   is always actionable. The left control still fades at the start (a
-   flipped "forward" there would just duplicate the right button).
+   a rewind (double-left chevron, "Rewind to the first slide") that cuts
+   back to slide 1 instantly (no 4-3-2-1 sweep; one-page stepping is the
+   single left chevron's job). The left control still fades at the start
+   (a flipped "forward" there would just duplicate the right button).
 13. **Uniform rail behavior** (user-directed): every RailScroller now shows
    pagination dashes (default on) and supports mouse grab-drag; the hero
    gained a page-flip drag (mandatory snap made short drags rubber-band
