@@ -230,12 +230,23 @@ export function RailScroller({
       </button>
       <button
         type="button"
-        aria-label={atEnd ? "Rewind one page" : "Scroll right"}
-        onClick={() => nudge(atEnd ? -1 : 1)}
+        aria-label={atEnd ? "Rewind to the first slide" : "Scroll right"}
+        onClick={() => {
+          const el = railRef.current
+          if (el === null) return
+          if (atEnd) {
+            // Jump straight back to slide 1 — an instant cut, not a smooth
+            // sweep back through every page. Stepping one page at a time is
+            // the single left chevron's job.
+            el.scrollTo({ left: 0, behavior: "auto" })
+          } else {
+            nudge(1)
+          }
+        }}
         className={cn(arrowClass, "-right-4")}
       >
         {/* The control never disappears: at the end it becomes a rewind
-            (double-left) so the rail can always be driven back manually. */}
+            (double-left) that returns to the first slide. */}
         <HugeiconsIcon icon={atEnd ? ArrowLeftDoubleIcon : ArrowRight01Icon} />
       </button>
       {pagination && pageCount > 1 && (
