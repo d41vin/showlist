@@ -1,6 +1,10 @@
 "use client"
 
-import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
+import {
+  ArrowLeft01Icon,
+  ArrowLeftDoubleIcon,
+  ArrowRight01Icon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
@@ -226,12 +230,13 @@ export function RailScroller({
       </button>
       <button
         type="button"
-        aria-label="Scroll right"
-        disabled={atEnd}
-        onClick={() => nudge(1)}
+        aria-label={atEnd ? "Rewind one page" : "Scroll right"}
+        onClick={() => nudge(atEnd ? -1 : 1)}
         className={cn(arrowClass, "-right-4")}
       >
-        <HugeiconsIcon icon={ArrowRight01Icon} />
+        {/* The control never disappears: at the end it becomes a rewind
+            (double-left) so the rail can always be driven back manually. */}
+        <HugeiconsIcon icon={atEnd ? ArrowLeftDoubleIcon : ArrowRight01Icon} />
       </button>
       {pagination && pageCount > 1 && (
         <div className="mt-2.5 flex items-center justify-center gap-1.5">
