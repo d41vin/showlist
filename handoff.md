@@ -123,7 +123,12 @@ User-directed pass on top of session 7.
    don't open on release). Provider rail: HBO Max logo fixed (full TMDB
    URL — the bare hash path resolved against localhost), Paramount back to
    TMDB's Premium-tier artwork, order now Apple TV → Amazon Prime Video →
-   the rest alphabetically.
+   rest alphabetically.
+14. **Edge control never disappears** (user feedback on the fade-out): the
+   right-hand control stays visible on every rail — at the end it flips to
+   a rewind (double-left chevron, "Rewind one page") so manual ping-pong
+   is always actionable. The left control still fades at the start (a
+   flipped "forward" there would just duplicate the right button).
 13. **Uniform rail behavior** (user-directed): every RailScroller now shows
    pagination dashes (default on) and supports mouse grab-drag; the hero
    gained a page-flip drag (mandatory snap made short drags rubber-band
