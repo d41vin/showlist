@@ -45,6 +45,7 @@ export function RailScroller({
   const [atEnd, setAtEnd] = useState(true)
   const [pageCount, setPageCount] = useState(0)
   const [activePage, setActivePage] = useState(0)
+  const [rewinding, setRewinding] = useState(false)
   const hoveredRef = useRef(false)
   const interactedRef = useRef(false)
   const directionRef = useRef(1)
@@ -190,6 +191,24 @@ export function RailScroller({
     })
   }
 
+  // Rewind to slide 1: fade the rail out, jump while it's invisible, fade
+  // back in — a deliberate scene reset instead of an abrupt cut or a
+  // backward sweep through every page. Reduced-motion users get the
+  // instant jump.
+  const rewindToStart = () => {
+    const el = railRef.current
+    if (el === null) return
+    if (scrollBehavior === "auto") {
+      el.scrollTo({ left: 0, behavior: "auto" })
+      return
+    }
+    setRewinding(true)
+    window.setTimeout(() => {
+      el.scrollTo({ left: 0, behavior: "auto" })
+      setRewinding(false)
+    }, 180)
+  }
+
   const arrowClass =
     "absolute top-1/2 z-10 hidden size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border bg-background/90 shadow-sm backdrop-blur transition-opacity hover:bg-accent disabled:pointer-events-none disabled:opacity-0 lg:flex"
 
@@ -213,7 +232,8 @@ export function RailScroller({
         onPointerCancel={onPointerEnd}
         onDragStart={(e) => e.preventDefault()}
         className={cn(
-          "hide-scrollbar flex gap-4 overflow-x-auto pb-2 select-none",
+          "hide-scrollbar flex gap-4 overflow-x-auto pb-2 transition-opacity duration-200 select-none",
+          rewinding && "opacity-0",
           className
         )}
       >
@@ -232,13 +252,8 @@ export function RailScroller({
         type="button"
         aria-label={atEnd ? "Rewind to the first slide" : "Scroll right"}
         onClick={() => {
-          const el = railRef.current
-          if (el === null) return
           if (atEnd) {
-            // Jump straight back to slide 1 — an instant cut, not a smooth
-            // sweep back through every page. Stepping one page at a time is
-            // the single left chevron's job.
-            el.scrollTo({ left: 0, behavior: "auto" })
+            rewindToStart()
           } else {
             nudge(1)
           }
