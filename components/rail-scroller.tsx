@@ -45,7 +45,6 @@ export function RailScroller({
   const [atEnd, setAtEnd] = useState(true)
   const [pageCount, setPageCount] = useState(0)
   const [activePage, setActivePage] = useState(0)
-  const [rewinding, setRewinding] = useState(false)
   const hoveredRef = useRef(false)
   const interactedRef = useRef(false)
   const directionRef = useRef(1)
@@ -191,22 +190,12 @@ export function RailScroller({
     })
   }
 
-  // Rewind to slide 1: fade the rail out, jump while it's invisible, fade
-  // back in — a deliberate scene reset instead of an abrupt cut or a
-  // backward sweep through every page. Reduced-motion users get the
-  // instant jump.
+  // Rewind to slide 1: a fast smooth glide back — deliberately not a
+  // backward sweep page by page, and not an abrupt cut.
   const rewindToStart = () => {
     const el = railRef.current
     if (el === null) return
-    if (scrollBehavior === "auto") {
-      el.scrollTo({ left: 0, behavior: "auto" })
-      return
-    }
-    setRewinding(true)
-    window.setTimeout(() => {
-      el.scrollTo({ left: 0, behavior: "auto" })
-      setRewinding(false)
-    }, 180)
+    el.scrollTo({ left: 0, behavior: scrollBehavior })
   }
 
   const arrowClass =
@@ -232,8 +221,7 @@ export function RailScroller({
         onPointerCancel={onPointerEnd}
         onDragStart={(e) => e.preventDefault()}
         className={cn(
-          "hide-scrollbar flex gap-4 overflow-x-auto pb-2 transition-opacity duration-200 select-none",
-          rewinding && "opacity-0",
+          "hide-scrollbar flex gap-4 overflow-x-auto pb-2 select-none",
           className
         )}
       >

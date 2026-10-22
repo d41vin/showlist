@@ -128,9 +128,9 @@ User-directed pass on top of session 7.
    right-hand control stays visible on every rail — at the end it flips to
    a rewind (double-left chevron, "Rewind to the first slide") that cuts
    back to slide 1 instantly (no 4-3-2-1 sweep; one-page stepping is the
-   single left chevron's job). The rewind crossfades: the rail fades out
-   (~180ms), jumps to slide 1 invisibly, fades back in — no abrupt cut,
-   no backward sweep; reduced-motion users keep the instant jump. The left control still fades at the start
+   single left chevron's job). The rewind itself is a fast smooth glide
+   back to slide 1 (the user preferred the glide over both the instant cut
+   and a crossfade). The left control still fades at the start
    (a flipped "forward" there would just duplicate the right button).
 13. **Uniform rail behavior** (user-directed): every RailScroller now shows
    pagination dashes (default on) and supports mouse grab-drag; the hero
