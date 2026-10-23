@@ -1,44 +1,81 @@
 "use client"
 
+import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
 import { Download01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction, useConvexAuth, useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-
-import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
+import {
+  buildRuntimeRequest,
+  csvField,
+  formatWatchTime,
+  getActivityYears,
+  getMonthlyActivity,
+  getTopShows,
+  type EpisodeWatch,
+} from "@/lib/stats"
+import { cn } from "@/lib/utils"
 
 type ItemDoc = Doc<"items">
 type WatchTime = FunctionReturnType<typeof api.stats.get>
 
-// Export helpers — everything is generated in the browser from the reactive
-// queries; nothing passes through a server.
+const activityConfig = {
+  movies: { label: "Movies", color: "var(--chart-1)" },
+  episodes: { label: "Episodes", color: "var(--chart-2)" },
+} satisfies ChartConfig
+
+const emptyWatchTime: WatchTime = {
+  movieMinutes: 0,
+  moviesWithRuntime: 0,
+  episodeMinutes: 0,
+  episodesWithRuntime: 0,
+  limited: false,
+}
+
 function downloadFile(name: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: mime })
-  const url = URL.createObjectURL(blob)
+  const url = URL.createObjectURL(new Blob([content], { type: mime }))
   const anchor = document.createElement("a")
   anchor.href = url
   anchor.download = name
   anchor.click()
-  URL.revokeObjectURL(url)
-}
-
-function csvField(value: string | number | boolean) {
-  const s = String(value)
-  return /[",\n\r]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 function isoOrNull(ms: number | undefined) {
   return ms === undefined ? "" : new Date(ms).toISOString()
 }
 
-// The Stats page: counts come reactively from the user's own data (free),
-// estimated watch time comes from TMDB runtimes via the shared cache.
 export default function StatsPage() {
   return (
     <>
@@ -79,106 +116,17 @@ function StatsContent() {
     api.collections.listMemberships,
     isAuthenticated ? {} : "skip"
   )
-  const statsGet = useAction(api.stats.get)
-
-  const [watchTime, setWatchTime] = useState<WatchTime | null>(null)
-  const [failed, setFailed] = useState(false)
-
-  const watchedMovies = useMemo(
-    () =>
-      (myItems ?? [])
-        .filter((item) => item.mediaType === "movie" && item.watched)
-        .map((item) => item.tmdbId),
-    [myItems]
-  )
-  const tickedSeasons = useMemo(
-    () =>
-      [
-        ...new Set(
-          (watches ?? []).map((watch) => `${watch.tmdbId}:${watch.season}`)
-        ),
-      ].map((key) => {
-        const [tmdbId, season] = key.split(":").map(Number)
-        return { tmdbId, season }
-      }),
-    [watches]
-  )
-  // Only refetch when the underlying inputs actually change (string keys,
-  // not array identities).
-  const moviesKey = useMemo(() => watchedMovies.join(","), [watchedMovies])
-  const seasonsKey = useMemo(
-    () => tickedSeasons.map((s) => `${s.tmdbId}:${s.season}`).join(","),
-    [tickedSeasons]
-  )
-
-  useEffect(() => {
-    if (!isAuthenticated || myItems === undefined || watches === undefined) {
-      return
-    }
-    if (moviesKey === "" && seasonsKey === "") {
-      return
-    }
-    let cancelled = false
-    statsGet({
-      movieIds: moviesKey === "" ? [] : moviesKey.split(",").map(Number),
-      tvSeasons:
-        seasonsKey === ""
-          ? []
-          : seasonsKey.split(",").map((key) => {
-              const [tmdbId, season] = key.split(":").map(Number)
-              return { tmdbId, season }
-            }),
-    })
-      .then((result) => {
-        if (!cancelled) {
-          setWatchTime(result)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setFailed(true)
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [isAuthenticated, myItems, watches, moviesKey, seasonsKey, statsGet])
-
-  const stats = useMemo(() => {
-    const items: ItemDoc[] = myItems ?? []
-    const counts = {
-      titles: items.length,
-      movies: items.filter((i) => i.mediaType === "movie").length,
-      shows: items.filter((i) => i.mediaType === "tv").length,
-      watchlist: items.filter((i) => i.inWatchlist).length,
-      watching: items.filter((i) => i.watching === true).length,
-      watched: items.filter((i) => i.watched).length,
-      liked: items.filter((i) => i.sentiment === "liked").length,
-      disliked: items.filter((i) => i.sentiment === "disliked").length,
-      episodes: (watches ?? []).length,
-    }
-    return counts
-  }, [myItems, watches])
-
   const loading = myItems === undefined || watches === undefined
+  const exportReady =
+    !loading && myCollections !== undefined && memberships !== undefined
 
   const exportJson = () => {
-    if (
-      myItems === undefined ||
-      watches === undefined ||
-      myCollections === undefined ||
-      memberships === undefined
-    ) {
-      return
-    }
+    if (!exportReady) return
     const payload = {
       exportedAt: new Date().toISOString(),
       items: myItems,
-      collections: (myCollections ?? []).map(({ _id, name }) => ({
-        id: _id,
-        name,
-      })),
-      memberships: memberships ?? [],
+      collections: myCollections.map(({ _id, name }) => ({ id: _id, name })),
+      memberships,
       episodeWatches: watches,
     }
     downloadFile(
@@ -189,20 +137,17 @@ function StatsContent() {
   }
 
   const exportItemsCsv = () => {
-    if (myItems === undefined) {
-      return
-    }
+    if (!exportReady) return
     const collectionNames = new Map<Id<"collections">, string>()
-    for (const c of myCollections ?? []) {
-      collectionNames.set(c._id, c.name)
-    }
+    for (const collection of myCollections)
+      collectionNames.set(collection._id, collection.name)
     const namesByItem = new Map<Id<"items">, string[]>()
-    for (const m of memberships ?? []) {
-      const name = collectionNames.get(m.collectionId)
+    for (const membership of memberships) {
+      const name = collectionNames.get(membership.collectionId)
       if (name === undefined) continue
-      const list = namesByItem.get(m.itemId) ?? []
+      const list = namesByItem.get(membership.itemId) ?? []
       list.push(name)
-      namesByItem.set(m.itemId, list)
+      namesByItem.set(membership.itemId, list)
     }
     const header = [
       "tmdbId",
@@ -245,136 +190,522 @@ function StatsContent() {
     }
     downloadFile(
       `showlist-items-${new Date().toISOString().slice(0, 10)}.csv`,
-      // BOM so Excel reads the UTF-8 titles correctly.
       `\uFEFF${lines.join("\r\n")}`,
       "text/csv;charset=utf-8"
     )
   }
 
-  const exportReady =
-    myItems !== undefined &&
-    watches !== undefined &&
-    myCollections !== undefined &&
-    memberships !== undefined
+  const counts = useMemo(() => {
+    const items = myItems ?? []
+    return {
+      titles: items.length,
+      movies: items.filter((item) => item.mediaType === "movie").length,
+      shows: items.filter((item) => item.mediaType === "tv").length,
+      watchlist: items.filter((item) => item.inWatchlist).length,
+      watching: items.filter((item) => item.watching).length,
+      watched: items.filter((item) => item.watched).length,
+      liked: items.filter((item) => item.sentiment === "liked").length,
+      disliked: items.filter((item) => item.sentiment === "disliked").length,
+    }
+  }, [myItems])
+  const rated = counts.liked + counts.disliked
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Stats</h1>
+    <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">Stats</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Your library, your habits, your time.
+        </p>
+      </div>
 
       {loading ? (
-        <div className="mt-8 grid gap-8">
-          <StatSectionSkeleton rows={2} />
-          <StatSectionSkeleton rows={2} />
+        <div
+          className="grid gap-6"
+          role="status"
+          aria-label="Loading your stats"
+        >
+          <Card>
+            <CardContent>
+              <StatSectionSkeleton count={4} />
+            </CardContent>
+          </Card>
+          <Skeleton className="h-80 w-full" />
+          <Card>
+            <CardContent>
+              <StatSectionSkeleton count={3} />
+            </CardContent>
+          </Card>
         </div>
       ) : (
-        <div className="mt-8 flex flex-col gap-10">
-          <section>
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              Library
-            </h2>
-            <div className="mt-3 grid grid-cols-2 gap-6 sm:grid-cols-4">
-              <Stat number={stats.titles} label="Titles tracked" big />
-              <Stat number={stats.movies} label="Movies" />
-              <Stat number={stats.shows} label="Shows" />
-              <Stat number={stats.episodes} label="Episodes ticked" />
-            </div>
-          </section>
+        <div className="grid gap-6">
+          {counts.titles === 0 && watches.length === 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Your story starts here</CardTitle>
+                <CardDescription>
+                  Add a title or log an episode and your stats will take shape.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button render={<Link href="/discover" />}>
+                  Discover something to watch
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
-          <section>
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              Status
-            </h2>
-            <div className="mt-3 grid grid-cols-2 gap-6 sm:grid-cols-4">
-              <Stat number={stats.watchlist} label="Watchlist" />
-              <Stat number={stats.watching} label="Watching" />
-              <Stat number={stats.watched} label="Watched" />
-              <Stat
-                number={stats.liked - stats.disliked}
-                label="Net sentiment"
-                hint={`${stats.liked} liked · ${stats.disliked} disliked`}
-              />
-            </div>
-          </section>
+          <Card role="region" aria-labelledby="library-heading">
+            <CardHeader>
+              <CardTitle>
+                <h2 id="library-heading">Library at a glance</h2>
+              </CardTitle>
+              <CardDescription>
+                All-time totals from your current library.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+              <Stat number={counts.titles} label="Titles tracked" big />
+              <Stat number={counts.movies} label="Movies" big />
+              <Stat number={counts.shows} label="Shows" big />
+              <Stat number={watches.length} label="Episodes logged" big />
+            </CardContent>
+          </Card>
 
-          <section>
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              Watch time (estimated)
-            </h2>
-            {failed ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                Couldn&rsquo;t load runtime data right now.
-              </p>
-            ) : watchTime === null ? (
-              <div className="mt-3 grid grid-cols-2 gap-6 sm:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <Skeleton className="h-10 w-32" />
-                  <Skeleton className="h-4 w-40" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Skeleton className="h-10 w-32" />
-                  <Skeleton className="h-4 w-40" />
-                </div>
+          <WatchTimeSection items={myItems} watches={watches} />
+
+          <div className="grid min-w-0 gap-6 lg:grid-cols-[2fr_1fr]">
+            <ActivitySection items={myItems} watches={watches} />
+            <TopShowsSection items={myItems} watches={watches} />
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card role="region" aria-labelledby="status-heading">
+              <CardHeader>
+                <CardTitle>
+                  <h2 id="status-heading">Where things stand</h2>
+                </CardTitle>
+                <CardDescription>
+                  Statuses are independent, so a title can appear in more than
+                  one.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-3 gap-3">
+                <Stat number={counts.watchlist} label="Watchlist" />
+                <Stat number={counts.watching} label="Watching" />
+                <Stat number={counts.watched} label="Watched" />
+              </CardContent>
+            </Card>
+            <Card role="region" aria-labelledby="sentiment-heading">
+              <CardHeader>
+                <CardTitle>
+                  <h2 id="sentiment-heading">Your verdict</h2>
+                </CardTitle>
+                <CardDescription>
+                  {rated > 0
+                    ? `You liked ${Math.round((counts.liked / rated) * 100)}% of the titles you reacted to.`
+                    : "Like or dislike a title to start building your taste profile."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-3 gap-3">
+                <Stat number={counts.liked} label="Liked" />
+                <Stat number={counts.disliked} label="Disliked" />
+                <Stat number={counts.titles - rated} label="No reaction" />
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card role="region" aria-labelledby="export-heading">
+            <CardHeader>
+              <CardTitle>
+                <h2 id="export-heading">Take your library with you</h2>
+              </CardTitle>
+              <CardDescription>
+                Exports always include your full library, regardless of the
+                selected activity year.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={exportJson}
+                  disabled={!exportReady}
+                >
+                  <HugeiconsIcon icon={Download01Icon} />
+                  Download JSON
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={exportItemsCsv}
+                  disabled={!exportReady}
+                >
+                  <HugeiconsIcon icon={Download01Icon} />
+                  Download items CSV
+                </Button>
               </div>
-            ) : (
-              (() => {
-                const totalMinutes =
-                  watchTime.movieMinutes + watchTime.episodeMinutes
-                const days = Math.floor(totalMinutes / (60 * 24))
-                const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
-                return (
-                  <div className="mt-3 grid grid-cols-2 gap-6">
-                    <Stat
-                      number={
-                        days > 0
-                          ? `${days}d ${hours}h`
-                          : `${Math.round(totalMinutes / 60)}h`
-                      }
-                      label="Total watch time"
-                      big
-                      hint={
-                        watchTime.episodesWithRuntime > 0
-                          ? `≈ ${Math.round(watchTime.episodeMinutes / 60)}h of episodes · ${Math.round(watchTime.movieMinutes / 60)}h of movies`
-                          : `${Math.round(watchTime.movieMinutes / 60)}h of movies`
-                      }
-                    />
-                    <Stat
-                      number={watchTime.episodesWithRuntime}
-                      label="Episodes with known runtime"
-                    />
-                  </div>
-                )
-              })()
-            )}
-          </section>
-
-          <section>
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              Export
-            </h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="outline" onClick={exportJson} disabled={!exportReady}>
-                <HugeiconsIcon icon={Download01Icon} />
-                Download JSON
-              </Button>
-              <Button variant="outline" onClick={exportItemsCsv} disabled={!exportReady}>
-                <HugeiconsIcon icon={Download01Icon} />
-                Download items CSV
-              </Button>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              JSON has every item, collection and episode tick; the CSV covers
-              items only. Generated in your browser.
-            </p>
-          </section>
-
-          <p className="text-xs text-muted-foreground">
-            Estimates use TMDB runtimes for movies you marked watched and
-            episodes you ticked. Ticks are personal accounting — they
-            don&rsquo;t change any list statuses.
-          </p>
+              <p className="text-xs text-muted-foreground">
+                JSON includes items, collections and episode logs; CSV includes
+                items and collection names. Generated in your browser.
+              </p>
+            </CardContent>
+          </Card>
         </div>
       )}
     </main>
+  )
+}
+
+function WatchTimeSection({
+  items,
+  watches,
+}: {
+  items: ItemDoc[]
+  watches: EpisodeWatch[]
+}) {
+  const statsGet = useAction(api.stats.get)
+  const request = useMemo(
+    () => buildRuntimeRequest(items, watches),
+    [items, watches]
+  )
+  const requestKey = JSON.stringify(request)
+  const movieCount = request.movieIds.length
+  const episodeCount = request.tvSeasons.reduce(
+    (total, season) => total + season.episodes.length,
+    0
+  )
+  const empty = movieCount === 0 && episodeCount === 0
+  const [attempt, setAttempt] = useState(0)
+  const [response, setResponse] = useState<{
+    key: string
+    attempt: number
+    data: WatchTime | null
+    failed: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    if (empty) return
+    let cancelled = false
+    const input: ReturnType<typeof buildRuntimeRequest> = JSON.parse(requestKey)
+    statsGet(input)
+      .then((data) => {
+        if (!cancelled)
+          setResponse({ key: requestKey, attempt, data, failed: false })
+      })
+      .catch(() => {
+        if (!cancelled)
+          setResponse({ key: requestKey, attempt, data: null, failed: true })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [requestKey, empty, attempt, statsGet])
+
+  const current =
+    response?.key === requestKey && response.attempt === attempt
+      ? response
+      : null
+  const data = empty ? emptyWatchTime : current?.data
+  const failed = !empty && current?.failed
+  const missing = data
+    ? movieCount +
+      episodeCount -
+      data.moviesWithRuntime -
+      data.episodesWithRuntime
+    : 0
+  const totalMinutes = data ? data.movieMinutes + data.episodeMinutes : 0
+
+  return (
+    <Card role="region" aria-labelledby="runtime-heading">
+      <CardHeader>
+        <CardTitle>
+          <h2 id="runtime-heading">Time well spent</h2>
+        </CardTitle>
+        <CardDescription>
+          All-time estimate from watched movies and only the episodes you
+          logged.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {failed ? (
+          <div className="flex flex-wrap items-center gap-3" role="status">
+            <p className="text-sm text-muted-foreground">
+              Couldn&rsquo;t load runtime data. Your library stats are still
+              available.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAttempt((value) => value + 1)}
+            >
+              Try again
+            </Button>
+          </div>
+        ) : !data ? (
+          <div role="status" aria-label="Loading watch time">
+            <StatSectionSkeleton count={3} />
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+              <Stat
+                number={
+                  missing > 0 && totalMinutes === 0
+                    ? "Unavailable"
+                    : formatWatchTime(totalMinutes)
+                }
+                label={missing > 0 ? "Known watch time" : "Total watch time"}
+                big
+              />
+              <Stat
+                number={
+                  movieCount > 0 && data.moviesWithRuntime === 0
+                    ? "—"
+                    : formatWatchTime(data.movieMinutes)
+                }
+                label="Movies"
+                hint={`${data.moviesWithRuntime} of ${movieCount} with runtime`}
+              />
+              <Stat
+                number={
+                  episodeCount > 0 && data.episodesWithRuntime === 0
+                    ? "—"
+                    : formatWatchTime(data.episodeMinutes)
+                }
+                label="Episodes"
+                hint={`${data.episodesWithRuntime} of ${episodeCount} with runtime`}
+              />
+            </div>
+            {empty ? (
+              <p className="text-xs text-muted-foreground">
+                Mark a movie watched or log an episode to start your estimate.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                TMDB runtimes, not a playback timer. Rewatches are not counted
+                separately.
+              </p>
+            )}
+            {missing > 0 && (
+              <div className="flex flex-wrap items-center gap-3" role="status">
+                <p className="text-xs text-muted-foreground">
+                  Some runtimes are unavailable, so this total is incomplete.
+                  {data.limited
+                    ? " Estimates currently cover up to 300 movies and 300 seasons."
+                    : ""}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAttempt((value) => value + 1)}
+                >
+                  Retry runtimes
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ActivitySection({
+  items,
+  watches,
+}: {
+  items: ItemDoc[]
+  watches: EpisodeWatch[]
+}) {
+  const [currentYear] = useState(() => new Date().getFullYear())
+  const [selectedYear, setSelectedYear] = useState(currentYear)
+  const years = useMemo(
+    () => getActivityYears(items, watches, currentYear),
+    [items, watches, currentYear]
+  )
+  const year = years.includes(selectedYear) ? selectedYear : currentYear
+  const activity = useMemo(
+    () => getMonthlyActivity(items, watches, year),
+    [items, watches, year]
+  )
+  const hasActivity = activity.movies + activity.episodes > 0
+
+  return (
+    <Card className="min-w-0" role="region" aria-labelledby="activity-heading">
+      <CardHeader>
+        <CardTitle>
+          <h2 id="activity-heading">Your year in logs</h2>
+        </CardTitle>
+        <CardDescription>
+          Movies marked watched and episodes logged.
+        </CardDescription>
+        <CardAction>
+          <Select
+            value={year}
+            onValueChange={(value) => {
+              if (value !== null) setSelectedYear(value)
+            }}
+          >
+            <SelectTrigger aria-label="Activity year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {years.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid min-w-0 gap-5">
+        <div className="grid grid-cols-3 gap-3" aria-live="polite">
+          <Stat number={activity.movies} label="Movies" />
+          <Stat number={activity.episodes} label="Episodes" />
+          <Stat number={activity.activeDays} label="Days logged" />
+        </div>
+        {hasActivity ? (
+          <>
+            <ChartContainer
+              config={activityConfig}
+              className="aspect-auto h-56 w-full"
+              aria-label={`Monthly logging activity for ${year}`}
+            >
+              <BarChart
+                accessibilityLayer
+                data={activity.months}
+                margin={{ left: -20, right: 4 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="month"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  minTickGap={8}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                  width={40}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar
+                  dataKey="movies"
+                  fill="var(--color-movies)"
+                  radius={4}
+                  isAnimationActive={false}
+                />
+                <Bar
+                  dataKey="episodes"
+                  fill="var(--color-episodes)"
+                  radius={4}
+                  isAnimationActive={false}
+                />
+              </BarChart>
+            </ChartContainer>
+            <details className="text-sm">
+              <summary className="cursor-pointer">View monthly numbers</summary>
+              <table className="mt-3 w-full text-left tabular-nums">
+                <caption className="sr-only">
+                  Monthly logging totals for {year}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col" className="py-2">
+                      Month
+                    </th>
+                    <th scope="col" className="py-2 text-right">
+                      Movies
+                    </th>
+                    <th scope="col" className="py-2 text-right">
+                      Episodes
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.months.map((month) => (
+                    <tr key={month.month}>
+                      <th scope="row" className="py-1 text-left font-normal">
+                        {month.month}
+                      </th>
+                      <td className="py-1 text-right">{month.movies}</td>
+                      <td className="py-1 text-right">{month.episodes}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          </>
+        ) : (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No dated activity in {year} yet.
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Dates reflect when you marked things, not necessarily when you watched
+          them. Clearing a log removes it here; re-marking moves its date.
+          {activity.undatedMovies > 0
+            ? ` ${activity.undatedMovies} watched ${activity.undatedMovies === 1 ? "movie has" : "movies have"} no saved date and ${activity.undatedMovies === 1 ? "is" : "are"} excluded from the chart.`
+            : ""}
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function TopShowsSection({
+  items,
+  watches,
+}: {
+  items: ItemDoc[]
+  watches: EpisodeWatch[]
+}) {
+  const shows = useMemo(() => getTopShows(items, watches), [items, watches])
+  return (
+    <Card role="region" aria-labelledby="shows-heading">
+      <CardHeader>
+        <CardTitle>
+          <h2 id="shows-heading">Your most-logged shows</h2>
+        </CardTitle>
+        <CardDescription>
+          Top five by episodes logged, across all time.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {shows.length === 0 ? (
+          <p className="py-8 text-sm text-muted-foreground">
+            Log episodes from a show&rsquo;s details to see your favourites rise
+            to the top.
+          </p>
+        ) : (
+          <ol className="grid gap-5">
+            {shows.map((show, index) => (
+              <li key={show.tmdbId} className="flex min-w-0 items-start gap-3">
+                <span
+                  className="text-sm text-muted-foreground tabular-nums"
+                  aria-hidden="true"
+                >
+                  {index + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium wrap-break-word">
+                    {show.title}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {show.episodes.toLocaleString()}{" "}
+                    {show.episodes === 1 ? "episode" : "episodes"}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -392,11 +723,12 @@ function Stat({
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <p
-        className={`font-semibold tracking-tight tabular-nums ${
-          big ? "text-4xl" : "text-3xl"
-        }`}
+        className={cn(
+          "font-semibold tracking-tight tabular-nums",
+          big ? "text-3xl" : "text-2xl"
+        )}
       >
-        {number}
+        {typeof number === "number" ? number.toLocaleString() : number}
       </p>
       <p className="text-sm text-muted-foreground">{label}</p>
       {hint !== undefined && (
@@ -406,12 +738,17 @@ function Stat({
   )
 }
 
-function StatSectionSkeleton({ rows }: { rows: number }) {
+function StatSectionSkeleton({ count }: { count: number }) {
   return (
-    <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-      {Array.from({ length: rows * 2 }, (_, i) => (
-        <div key={i} className="flex flex-col gap-1">
-          <Skeleton className="h-10 w-24" />
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-6",
+        count === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4"
+      )}
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="flex flex-col gap-1">
+          <Skeleton className="h-9 w-24" />
           <Skeleton className="h-4 w-20" />
         </div>
       ))}
