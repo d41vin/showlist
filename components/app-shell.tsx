@@ -57,6 +57,7 @@ import {
   type MediaItem,
 } from "@/lib/media"
 import { cn } from "@/lib/utils"
+import { useAiConfig } from "@/lib/ai"
 import { useItemStateMap } from "@/components/use-item-state"
 
 const SEARCH_DEBOUNCE_MS = 400
@@ -90,8 +91,10 @@ export function AppShell() {
   // Sort + type filter for the library list tabs (shared across tabs).
   const [listSort, setListSort] = useState<ListSort>("added")
   const [listType, setListType] = useState<MediaTypeFilter>("all")
-  // AI describe mode replaces the search bar and tab area.
+  // AI describe mode replaces the search bar and tab area. Hidden entirely
+  // until the user configures an LLM key (header popover → AI settings).
   const [aiMode, setAiMode] = useState(false)
+  const aiConfigured = useAiConfig() !== null
   // Which collection the Collections tab is showing (null = cards view;
   // reset whenever the tab changes so re-entering shows the cards again).
   const [selectedCollectionId, setSelectedCollectionId] =
@@ -269,7 +272,7 @@ export function AppShell() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
-      {aiMode ? (
+      {aiMode && aiConfigured ? (
         <div className="mx-auto w-full max-w-2xl">
           <AiDescribe gridState={gridProps} onExit={() => setAiMode(false)} />
         </div>
@@ -303,16 +306,18 @@ export function AppShell() {
                   }}
                   aria-label="Search movies and shows"
                 />
-                <Button
-                  variant={aiMode ? "default" : "secondary"}
-                  size="icon-sm"
-                  className="absolute top-1/2 right-1.5 -translate-y-1/2"
-                  aria-pressed={aiMode}
-                  aria-label="Describe what you want to watch instead"
-                  onClick={() => setAiMode(true)}
-                >
-                  <HugeiconsIcon icon={AiMagicIcon} />
-                </Button>
+                {aiConfigured && (
+                  <Button
+                    variant={aiMode ? "default" : "secondary"}
+                    size="icon-sm"
+                    className="absolute top-1/2 right-1.5 -translate-y-1/2"
+                    aria-pressed={aiMode}
+                    aria-label="Describe what you want to watch instead"
+                    onClick={() => setAiMode(true)}
+                  >
+                    <HugeiconsIcon icon={AiMagicIcon} />
+                  </Button>
+                )}
               </div>
               {!searchActive && (
                 <div className="hide-scrollbar -mx-6 overflow-x-auto px-6 py-1 lg:order-first lg:mx-0 lg:overflow-visible lg:px-0 lg:py-0">
