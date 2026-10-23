@@ -4,6 +4,8 @@ import {
   ArrowLeft01Icon,
   ArrowLeftDoubleIcon,
   ArrowRight01Icon,
+  PauseIcon,
+  PlayIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -21,11 +23,12 @@ import { cn } from "@/lib/utils"
 //
 // `className` extends the inner scroller (e.g. snap classes for paging
 // rails). `pagination` (on by default) renders clickable dashes below the
-// rail that track the active page. When `autoAdvanceMs` is set, the rail
-// advances one page on that interval while untouched, unhovered and
-// tab-visible — ping-ponging at the ends (1→2→…→N→N-1→…) instead of an
-// animated rewind. The first pointer/wheel/key interaction stops the
-// autoplay for good (the Netflix billboarding rule).
+// rail that track the active page; with autoplay on, the active dash fills
+// as a progress bar and a pause/play control sits at the right. When
+// `autoAdvanceMs` is set, the rail advances one page on that interval while
+// unhovered and tab-visible, wrapping to the first page with an instant cut
+// (1→2→…→N→1→…). Any interaction pauses the slideshow (a control to resume
+// is rendered with the dashes).
 export function RailScroller({
   children,
   className,
@@ -46,8 +49,12 @@ export function RailScroller({
   const [pageCount, setPageCount] = useState(0)
   const [activePage, setActivePage] = useState(0)
   const hoveredRef = useRef(false)
-  const interactedRef = useRef(false)
-  const directionRef = useRef(1)
+  const [paused, setPaused] = useState(false)
+  const pausedRef = useRef(false)
+  const setPausedBoth = useCallback((value: boolean) => {
+    pausedRef.current = value
+    setPaused(value)
+  }, [])
   const dragRef = useRef<{
     startX: number
     startScroll: number
@@ -109,36 +116,66 @@ export function RailScroller({
         el === null ||
         document.hidden ||
         hoveredRef.current ||
-        interactedRef.current
+        pausedRef.current
       ) {
         return
       }
       if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 1) {
-        directionRef.current = -1
-      } else if (el.scrollLeft <= 0) {
-        directionRef.current = 1
+        // Wrap: cut straight back to slide 1 — no backward sweep.
+        el.scrollTo({ left: 0, behavior: "auto" })
+      } else {
+        el.scrollBy({
+          left: el.clientWidth,
+          behavior: "smooth",
+        })
       }
-      el.scrollBy({
-        left: directionRef.current * el.clientWidth,
-        behavior: "smooth",
-      })
     }, autoAdvanceMs)
     const wrapper = wrapperRef.current
-    const markInteracted = () => {
-      interactedRef.current = true
+    // Any real interaction with the strip pauses the slideshow — the
+    // pause/play control itself is exempt so it can resume it. Scrolling
+    // the PAGE over the strip (vertical wheel, vertical touch swipe) does
+    // NOT count — only horizontal intent does.
+    const markInteracted = (e: Event) => {
+      if (
+        e.target instanceof Element &&
+        e.target.closest("[data-autoplay-control]") !== null
+      ) {
+        return
+      }
+      if (e instanceof WheelEvent && Math.abs(e.deltaX) <= Math.abs(e.deltaY)) {
+        return
+      }
+      setPausedBoth(true)
+    }
+    let touchStart: { x: number; y: number } | null = null
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0]
+      touchStart = t === undefined ? null : { x: t.clientX, y: t.clientY }
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      if (touchStart === null) return
+      const t = e.touches[0]
+      if (t === undefined) return
+      const dx = t.clientX - touchStart.x
+      const dy = t.clientY - touchStart.y
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) {
+        markInteracted(e)
+      }
     }
     wrapper?.addEventListener("pointerdown", markInteracted)
     wrapper?.addEventListener("wheel", markInteracted, { passive: true })
-    wrapper?.addEventListener("touchstart", markInteracted, { passive: true })
     wrapper?.addEventListener("keydown", markInteracted)
+    wrapper?.addEventListener("touchstart", onTouchStart, { passive: true })
+    wrapper?.addEventListener("touchmove", onTouchMove, { passive: true })
     return () => {
       window.clearInterval(timer)
       wrapper?.removeEventListener("pointerdown", markInteracted)
       wrapper?.removeEventListener("wheel", markInteracted)
-      wrapper?.removeEventListener("touchstart", markInteracted)
       wrapper?.removeEventListener("keydown", markInteracted)
+      wrapper?.removeEventListener("touchstart", onTouchStart)
+      wrapper?.removeEventListener("touchmove", onTouchMove)
     }
-  }, [autoAdvanceMs, scrollBehavior])
+  }, [autoAdvanceMs, scrollBehavior, setPausedBoth])
 
   // Mouse grab-to-scroll: pointerdown records the start; once the pointer
   // moves 5px we capture it and translate movement into scrollLeft, so
@@ -190,12 +227,12 @@ export function RailScroller({
     })
   }
 
-  // Rewind to slide 1: a fast smooth glide back — deliberately not a
-  // backward sweep page by page, and not an abrupt cut.
+  // Rewind to slide 1: an instant cut — the icon says "restart", so no
+  // backward glide through the pages in between.
   const rewindToStart = () => {
     const el = railRef.current
     if (el === null) return
-    el.scrollTo({ left: 0, behavior: scrollBehavior })
+    el.scrollTo({ left: 0, behavior: "auto" })
   }
 
   const arrowClass =
@@ -253,29 +290,69 @@ export function RailScroller({
         <HugeiconsIcon icon={atEnd ? ArrowLeftDoubleIcon : ArrowRight01Icon} />
       </button>
       {pagination && pageCount > 1 && (
-        <div className="mt-2.5 flex items-center justify-center gap-1.5">
-          {Array.from({ length: pageCount }, (_, i) => (
+        <div className="mt-2.5 flex items-center justify-center gap-2">
+          {/* Dots pill — media-player chrome: dark in both themes. */}
+          <div className="flex h-8 items-center gap-1.5 rounded-full bg-black/60 px-3 backdrop-blur">
+            {Array.from({ length: pageCount }, (_, i) => {
+              const active = activePage === i
+              const animating = active && autoAdvanceMs !== undefined && !paused
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={`Go to slide ${i + 1} of ${pageCount}`}
+                  aria-current={active}
+                  onClick={() => {
+                    const el = railRef.current
+                    if (el === null) return
+                    el.scrollTo({
+                      left: i * el.clientWidth,
+                      behavior: scrollBehavior,
+                    })
+                  }}
+                  className="group/dot -m-1.5 flex cursor-pointer items-center justify-center p-1.5"
+                >
+                  <span
+                    className={cn(
+                      "relative block overflow-hidden rounded-full transition-all",
+                      active
+                        ? animating
+                          ? "h-1.5 w-8 bg-white/25"
+                          : "h-1.5 w-8 bg-white"
+                        : "size-1.5 bg-white/40 group-hover/dot:bg-white/70"
+                    )}
+                  >
+                    {animating &&
+                      autoAdvanceMs !== undefined &&
+                      scrollBehavior === "smooth" && (
+                        <span
+                          aria-hidden
+                          className="absolute inset-y-0 left-0 rounded-full bg-white group-hover/rail:[animation-play-state:paused]"
+                          style={{
+                            animation: `rail-progress ${autoAdvanceMs}ms linear forwards`,
+                          }}
+                        />
+                      )}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          {autoAdvanceMs !== undefined && scrollBehavior === "smooth" && (
             <button
-              key={i}
               type="button"
-              aria-label={`Go to slide ${i + 1} of ${pageCount}`}
-              aria-current={activePage === i}
-              onClick={() => {
-                const el = railRef.current
-                if (el === null) return
-                el.scrollTo({
-                  left: i * el.clientWidth,
-                  behavior: scrollBehavior,
-                })
-              }}
-              className={cn(
-                "h-1 cursor-pointer rounded-full transition-all",
-                activePage === i
-                  ? "w-6 bg-foreground"
-                  : "w-3 bg-muted-foreground/40 hover:bg-muted-foreground/70"
-              )}
-            />
-          ))}
+              data-autoplay-control
+              aria-label={paused ? "Resume slideshow" : "Pause slideshow"}
+              aria-pressed={paused}
+              onClick={() => setPausedBoth(!paused)}
+              className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-black/75"
+            >
+              <HugeiconsIcon
+                icon={paused ? PlayIcon : PauseIcon}
+                className="size-3.5"
+              />
+            </button>
+          )}
         </div>
       )}
     </div>

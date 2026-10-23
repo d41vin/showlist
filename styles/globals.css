@@ -139,3 +139,13 @@
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Autoplay progress fill on the active pagination dash (RailScroller). */
+@keyframes rail-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
