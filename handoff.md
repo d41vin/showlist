@@ -124,6 +124,24 @@ User-directed pass on top of session 7.
    URL — the bare hash path resolved against localhost), Paramount back to
    TMDB's Premium-tier artwork, order now Apple TV → Amazon Prime Video →
    rest alphabetically.
+15. **Autoplay pause/play + progress dots** (user idea + reference design):
+   the pagination became a dark dot pill (chromaawards pattern) — inactive
+   dots, active dot as a progress track filling over the 8s interval —
+   plus a circular pause/play control at the right. Any interaction with
+   the strip pauses the slideshow (resumable via the control); scrolling
+   the page over the strip (vertical wheel / vertical touch swipe) does
+   NOT pause it — only horizontal intent does.
+16. **AI gating** (user decision): Describe sparkle and the For You section
+   are hidden until an LLM key is configured; the AI settings entry in the
+   header popover stays visible as the door.
+17. **Discover sections** (user decision, Netflix pattern): the category
+   tabs are gone — the page stacks hero → streaming rail → one control row
+   (type + genre + sort) → For you → Top 10 → Popular → Top rated → Now
+   playing, all shelves loaded per media-type filter. No per-section tabs
+   (global type filter + genre browse cover it).
+18. **Hero wrap** (user decision): autoplay cycles forward only
+   (1→…→5→1→…), cutting straight from 5 to 1 with no backward sweep; the
+   rewind control also cuts to slide 1 instantly.
 14. **Edge control never disappears** (user feedback on the fade-out): the
    right-hand control stays visible on every rail — at the end it flips to
    a rewind (double-left chevron, "Rewind to the first slide") that cuts
