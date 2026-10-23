@@ -30,18 +30,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
+import { useAiConfig } from "@/lib/ai"
 import { mediaKey, type MediaItem } from "@/lib/media"
 
 const SEARCH_DEBOUNCE_MS = 400
 
-type Category = "trending" | "popular" | "top-rated" | "in-theaters"
-
 type RowData = {
   title: string
   items: MediaItem[]
+  // Top-10 treatment: big rank numerals overlaid on the first ten posters.
+  ranked?: boolean
 }
 
 // One merged genre option — the union of the movie and TV genre lists by
@@ -141,7 +141,6 @@ function DiscoverContent() {
   }
 
   const [query, setQuery] = useState("")
-  const [category, setCategory] = useState<Category>("trending")
   const [mediaType, setMediaType] = useState<MediaTypeFilter>("all")
   const [rows, setRows] = useState<RowData[]>([])
   const [loading, setLoading] = useState(true)
@@ -170,6 +169,9 @@ function DiscoverContent() {
 
   const trimmedQuery = query.trim()
   const searchActive = trimmedQuery !== ""
+  // AI features stay hidden until the user has configured a key — the
+  // header popover's AI settings entry is the only always-visible door.
+  const aiConfigured = useAiConfig() !== null
 
   // Debounced search
   useEffect(() => {
@@ -201,7 +203,8 @@ function DiscoverContent() {
     return () => clearTimeout(timeout)
   }, [trimmedQuery, searchActive, search])
 
-  // Discovery data fetching
+  // Discovery data fetching: every shelf loads at once so the page reads
+  // like Netflix home — billboard, then stacked sections.
   useEffect(() => {
     if (searchActive) return
     const requestId = ++discoverRequestIdRef.current
@@ -212,56 +215,40 @@ function DiscoverContent() {
       const newRows: RowData[] = []
 
       try {
-        if (category === "trending") {
-          const items = await discoverTrending({ mediaType })
-          newRows.push({ title: "Trending", items })
-        } else if (category === "popular") {
-          if (mediaType === "all") {
-            const [movies, tv] = await Promise.all([
-              discoverPopular({ mediaType: "movie" }),
-              discoverPopular({ mediaType: "tv" }),
-            ])
-            newRows.push({ title: "Popular Movies", items: movies })
-            newRows.push({ title: "Popular TV", items: tv })
-          } else {
-            const items = await discoverPopular({ mediaType })
-            newRows.push({
-              title: mediaType === "movie" ? "Popular Movies" : "Popular TV",
-              items,
-            })
-          }
-        } else if (category === "top-rated") {
-          if (mediaType === "all") {
-            const [movies, tv] = await Promise.all([
-              discoverTopRated({ mediaType: "movie" }),
-              discoverTopRated({ mediaType: "tv" }),
-            ])
-            newRows.push({ title: "Top Rated Movies", items: movies })
-            newRows.push({ title: "Top Rated TV", items: tv })
-          } else {
-            const items = await discoverTopRated({ mediaType })
-            newRows.push({
-              title:
-                mediaType === "movie" ? "Top Rated Movies" : "Top Rated TV",
-              items,
-            })
-          }
-        } else if (category === "in-theaters") {
-          if (mediaType === "all") {
-            const [movies, tv] = await Promise.all([
-              discoverNowPlaying({ mediaType: "movie" }),
-              discoverNowPlaying({ mediaType: "tv" }),
-            ])
-            newRows.push({ title: "Now Playing", items: movies })
-            newRows.push({ title: "Airing Today", items: tv })
-          } else if (mediaType === "movie") {
-            const items = await discoverNowPlaying({ mediaType: "movie" })
-            newRows.push({ title: "Now Playing", items })
-          } else {
-            const items = await discoverNowPlaying({ mediaType: "tv" })
-            newRows.push({ title: "Airing Today", items })
-          }
-        }
+        newRows.push({
+          title: "Top 10 this week",
+          items: await discoverTrending({ mediaType }),
+          ranked: true,
+        })
+        const types: ("movie" | "tv")[] =
+          mediaType === "all" ? ["movie", "tv"] : [mediaType]
+        const popular = await Promise.all(
+          types.map((type) => discoverPopular({ mediaType: type }))
+        )
+        popular.forEach((items, i) =>
+          newRows.push({
+            title: types[i] === "movie" ? "Popular Movies" : "Popular TV",
+            items,
+          })
+        )
+        const top = await Promise.all(
+          types.map((type) => discoverTopRated({ mediaType: type }))
+        )
+        top.forEach((items, i) =>
+          newRows.push({
+            title: types[i] === "movie" ? "Top Rated Movies" : "Top Rated TV",
+            items,
+          })
+        )
+        const now = await Promise.all(
+          types.map((type) => discoverNowPlaying({ mediaType: type }))
+        )
+        now.forEach((items, i) =>
+          newRows.push({
+            title: types[i] === "movie" ? "Now Playing" : "Airing Today",
+            items,
+          })
+        )
       } catch {
         if (discoverRequestIdRef.current === requestId) {
           setError(true)
@@ -276,7 +263,6 @@ function DiscoverContent() {
 
     void fetchRows()
   }, [
-    category,
     mediaType,
     searchActive,
     discoverTrending,
@@ -516,11 +502,7 @@ function DiscoverContent() {
     "grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 
   const heroItems =
-    !searchActive &&
-    !loading &&
-    !error &&
-    genreName === null &&
-    category === "trending"
+    !searchActive && !loading && !error && genreName === null
       ? (rows[0]?.items ?? []).slice(0, 5)
       : []
 
@@ -586,11 +568,7 @@ function DiscoverContent() {
             ) : null}
           </>
         ) : (
-          /* Category tabs */
-          <Tabs
-            value={category}
-            onValueChange={(value) => setCategory(value as Category)}
-          >
+          <>
             {heroItems.length > 0 && (
               <div className="mb-8">
                 {/* Billboard strip: the top five trending titles as
@@ -619,13 +597,7 @@ function DiscoverContent() {
 
             <ProviderRail gridState={gridState} />
 
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-              <TabsList>
-                <TabsTrigger value="trending">Trending</TabsTrigger>
-                <TabsTrigger value="popular">Popular</TabsTrigger>
-                <TabsTrigger value="top-rated">Top Rated</TabsTrigger>
-                <TabsTrigger value="in-theaters">In Theaters</TabsTrigger>
-              </TabsList>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
               <MediaTypeToggle
                 value={mediaType}
                 onChange={(next) => {
@@ -634,10 +606,6 @@ function DiscoverContent() {
                   setMediaType(next)
                 }}
               />
-            </div>
-
-            {/* Browse by genre; sort applies within browse mode */}
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               <Select
                 items={genreSelectItems}
                 value={genreName === null ? "all" : genreName}
@@ -681,10 +649,14 @@ function DiscoverContent() {
               )}
             </div>
 
-            <div className="mt-6 flex flex-col gap-6">
-              {isAuthenticated && !error && !loading && genreName === null && (
-                <AiForYou isAuthenticated={isAuthenticated} />
-              )}
+            <div className="mt-6 flex flex-col gap-8">
+              {isAuthenticated &&
+                aiConfigured &&
+                !error &&
+                !loading &&
+                genreName === null && (
+                  <AiForYou isAuthenticated={isAuthenticated} />
+                )}
               {genreName !== null ? (
                 browseFailed === browseKey ? (
                   <p className="py-16 text-center text-sm text-muted-foreground">
@@ -732,23 +704,40 @@ function DiscoverContent() {
                   Something went wrong loading results. Try again.
                 </p>
               ) : loading ? (
-                <MediaRow title="" items={[]} loading renderCard={() => null} />
+                <>
+                  <MediaRow
+                    title=""
+                    items={[]}
+                    loading
+                    renderCard={() => null}
+                  />
+                  <MediaRow
+                    title=""
+                    items={[]}
+                    loading
+                    renderCard={() => null}
+                  />
+                  <MediaRow
+                    title=""
+                    items={[]}
+                    loading
+                    renderCard={() => null}
+                  />
+                </>
               ) : (
                 rows.map((row) => (
                   <MediaRow
                     key={row.title}
-                    title={
-                      category === "trending" ? "Top 10 this week" : row.title
-                    }
+                    title={row.title}
                     items={row.items}
                     loading={loading}
                     renderCard={renderCard}
-                    ranked={category === "trending"}
+                    ranked={row.ranked === true}
                   />
                 ))
               )}
             </div>
-          </Tabs>
+          </>
         )}
       </div>
     </main>
