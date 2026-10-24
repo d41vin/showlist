@@ -1,5 +1,7 @@
 "use client"
 
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction, useConvexAuth } from "convex/react"
 import { useEffect, useId, useState } from "react"
 import { useRetainedState } from "@/components/navigation-state"
@@ -92,8 +94,13 @@ export function RecommendationsView({
       aria-labelledby={headingId}
       className="mx-auto w-full max-w-6xl px-6 py-8"
     >
-      <div className="mb-6 flex flex-wrap items-center justify-center gap-2">
+      <div
+        className={`mb-6 flex flex-wrap items-center gap-2 ${
+          variant === "drawer" ? "justify-between" : "justify-center"
+        }`}
+      >
         <Button variant="secondary" size="sm" onClick={onBack}>
+          <HugeiconsIcon icon={ArrowLeft01Icon} />
           Back to title
         </Button>
         {variant === "drawer" && (

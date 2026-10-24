@@ -2,7 +2,6 @@
 
 import {
   ArrowLeft01Icon,
-  ArrowLeftDoubleIcon,
   ArrowRight01Icon,
   PauseIcon,
   PlayIcon,
@@ -240,14 +239,6 @@ export function RailScroller({
     })
   }
 
-  // Rewind to slide 1: an instant cut — the icon says "restart", so no
-  // backward glide through the pages in between.
-  const rewindToStart = () => {
-    const el = railRef.current
-    if (el === null) return
-    el.scrollTo({ left: 0, behavior: "auto" })
-  }
-
   const arrowClass =
     "absolute top-1/2 z-10 hidden size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border bg-background/90 shadow-sm backdrop-blur transition-opacity hover:bg-accent disabled:pointer-events-none disabled:opacity-0 lg:flex"
 
@@ -288,20 +279,12 @@ export function RailScroller({
       </button>
       <button
         type="button"
-        aria-label={atEnd ? "Rewind to the first slide" : "Scroll right"}
-        disabled={atStart && atEnd}
-        onClick={() => {
-          if (atEnd) {
-            rewindToStart()
-          } else {
-            nudge(1)
-          }
-        }}
+        aria-label="Scroll right"
+        disabled={atEnd}
+        onClick={() => nudge(1)}
         className={cn(arrowClass, controlsInset ? "right-3" : "-right-4")}
       >
-        {/* The control never disappears: at the end it becomes a rewind
-            (double-left) that returns to the first slide. */}
-        <HugeiconsIcon icon={atEnd ? ArrowLeftDoubleIcon : ArrowRight01Icon} />
+        <HugeiconsIcon icon={ArrowRight01Icon} />
       </button>
       {pagination && (
         <div

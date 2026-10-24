@@ -38,12 +38,14 @@ function TitleRouteContent({
   const router = useRouter()
   const {
     titleOrigin,
+    drawerOrigin,
     loadTitle,
     cachedTitle,
     returnToOrigin,
     keepTitleOrigin,
   } = useNavigationState()
   const { isAuthenticated, isLoading } = useConvexAuth()
+  const drilled = drawer && (drawerOrigin?.depth ?? 1) > 1
   const [snapshot] = useState(initialItem)
   const [data, setData] = useState(() => cachedTitle({ mediaType, tmdbId }))
   const [failed, setFailed] = useState(false)
@@ -97,7 +99,7 @@ function TitleRouteContent({
           data={data.details}
           variant={drawer ? "drawer" : "page"}
           onClose={onClose}
-          onBack={goBack}
+          onBack={drawer ? (drilled ? () => router.back() : undefined) : goBack}
         />
       )
     ) : (
@@ -106,7 +108,17 @@ function TitleRouteContent({
           <Skeleton className="h-[clamp(15rem,38vw,25rem)] max-h-[55dvh] w-full rounded-none" />
         )}
         <div className="mx-auto w-full max-w-2xl space-y-4 px-6 py-6">
-          <div className="flex justify-center">
+          <div className="flex flex-wrap justify-center gap-2">
+            {drawer && drilled && (
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Back to previous title"
+                onClick={() => router.back()}
+              >
+                Back
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
