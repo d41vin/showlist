@@ -1,22 +1,25 @@
 "use client"
 
 import { SignInButton } from "@clerk/nextjs"
-import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { useAction, useConvexAuth } from "convex/react"
-import type { FunctionReturnType } from "convex/server"
+import { useConvexAuth } from "convex/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
-import { DetailsDrawer } from "@/components/details-drawer"
+import { useEffect, useState } from "react"
 import { useNavigationState } from "@/components/navigation-state"
+import { RecommendationsView } from "@/components/recommendations-view"
 import { TitleDetails } from "@/components/title-details"
 import { Button } from "@/components/ui/button"
 import { DrawerDescription, DrawerTitle } from "@/components/ui/drawer"
 import { Skeleton } from "@/components/ui/skeleton"
-import { api } from "@/convex/_generated/api"
-import type { MediaType } from "@/lib/media"
+import type { MediaItem, MediaType } from "@/lib/media"
 
-type Props = { mediaType: MediaType; tmdbId: number; drawer?: boolean }
+type Props = {
+  mediaType: MediaType
+  tmdbId: number
+  drawer?: boolean
+  recommendations?: boolean
+  initialItem?: MediaItem
+  onClose?: () => void
+}
 
 export function TitleRoute(props: Props) {
   return (
@@ -24,21 +27,32 @@ export function TitleRoute(props: Props) {
   )
 }
 
-function TitleRouteContent({ mediaType, tmdbId, drawer = false }: Props) {
+function TitleRouteContent({
+  mediaType,
+  tmdbId,
+  drawer = false,
+  recommendations = false,
+  initialItem,
+  onClose,
+}: Props) {
   const router = useRouter()
-  const { titleOrigin } = useNavigationState()
+  const {
+    titleOrigin,
+    loadTitle,
+    cachedTitle,
+    returnToOrigin,
+    keepTitleOrigin,
+  } = useNavigationState()
   const { isAuthenticated, isLoading } = useConvexAuth()
-  const lookup = useAction(api.tmdb.title)
-  const [data, setData] = useState<FunctionReturnType<typeof api.tmdb.title>>()
+  const [snapshot] = useState(initialItem)
+  const [data, setData] = useState(() => cachedTitle({ mediaType, tmdbId }))
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
-  const [open, setOpen] = useState(true)
-  const navigated = useRef(false)
 
   useEffect(() => {
     if (!isAuthenticated) return
     let cancelled = false
-    lookup({ mediaType, tmdbId })
+    loadTitle({ mediaType, tmdbId }, attempt > 0)
       .then((result) => {
         if (!cancelled) setData(result)
       })
@@ -48,23 +62,21 @@ function TitleRouteContent({ mediaType, tmdbId, drawer = false }: Props) {
     return () => {
       cancelled = true
     }
-  }, [isAuthenticated, lookup, mediaType, tmdbId, attempt])
+  }, [isAuthenticated, loadTitle, mediaType, tmdbId, attempt])
 
   const goBack = () => {
-    if (navigated.current) return
-    navigated.current = true
-    if (titleOrigin) router.back()
-    else router.replace("/discover")
-  }
-  const close = () => {
-    setOpen(false)
-    // Background browser tabs do not reliably finish CSS exit animations.
-    if (document.visibilityState !== "visible") goBack()
+    const titleHref = `/${mediaType}/${tmdbId}`
+    if (titleOrigin && (!recommendations || titleOrigin.href === titleHref))
+      returnToOrigin(titleOrigin)
+    else {
+      if (drawer && recommendations && titleOrigin) keepTitleOrigin()
+      router.replace(recommendations ? titleHref : "/discover")
+    }
   }
   const loading =
     isLoading || (isAuthenticated && data === undefined && !failed)
   const heading = loading
-    ? "Loading title…"
+    ? (snapshot?.title ?? "Loading title…")
     : !isAuthenticated
       ? "Sign in to view this title"
       : failed
@@ -72,35 +84,50 @@ function TitleRouteContent({ mediaType, tmdbId, drawer = false }: Props) {
         : "Title unavailable"
   const content =
     isAuthenticated && data ? (
-      <TitleDetails
-        item={data.item}
-        data={data.details}
-        variant={drawer ? "drawer" : "page"}
-        onClose={close}
-      />
+      recommendations ? (
+        <RecommendationsView
+          item={data.item}
+          variant={drawer ? "drawer" : "page"}
+          onBack={goBack}
+          onClose={onClose}
+        />
+      ) : (
+        <TitleDetails
+          item={data.item}
+          data={data.details}
+          variant={drawer ? "drawer" : "page"}
+          onClose={onClose}
+          onBack={goBack}
+        />
+      )
     ) : (
-      <>
-        <div className="flex items-center justify-between gap-3 px-6 py-4">
+      <div className="w-full min-w-0">
+        {loading && (
+          <Skeleton className="h-[clamp(15rem,38vw,25rem)] max-h-[55dvh] w-full rounded-none" />
+        )}
+        <div className="mx-auto w-full max-w-2xl space-y-4 px-6 py-6">
+          <div className="flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={drawer ? onClose : goBack}
+              aria-label={drawer ? "Close details" : "Back"}
+            >
+              {drawer ? "Close" : "Back"}
+            </Button>
+          </div>
           {drawer ? (
-            <div>
+            <>
               <DrawerTitle>{heading}</DrawerTitle>
               <DrawerDescription className="sr-only">
-                Movie or TV show details.
+                Movie or series details.
               </DrawerDescription>
-            </div>
+            </>
           ) : (
             <h1 className="text-2xl font-semibold">{heading}</h1>
           )}
-          {drawer && (
-            <Button variant="outline" size="sm" onClick={close}>
-              Close details
-            </Button>
-          )}
-        </div>
-        <div className="mx-auto w-full max-w-2xl space-y-4 px-6 py-6">
           {loading ? (
             <div role="status" aria-label="Loading title" className="space-y-4">
-              <Skeleton className="h-52 w-full" />
               <Skeleton className="h-5 w-2/3" />
               <Skeleton className="h-20 w-full" />
             </div>
@@ -130,42 +157,17 @@ function TitleRouteContent({ mediaType, tmdbId, drawer = false }: Props) {
             </p>
           )}
         </div>
-      </>
+      </div>
     )
 
   return (
     <>
       <title>
         {data?.item.title
-          ? `${data.item.title} | ShowList`
+          ? `${recommendations ? "More like " : ""}${data.item.title} | ShowList`
           : "Title | ShowList"}
       </title>
-      {drawer ? (
-        <DetailsDrawer
-          open={open}
-          onOpenChange={(next) => {
-            if (!next) close()
-          }}
-          onOpenChangeComplete={(next) => {
-            if (!next) goBack()
-          }}
-          finalFocus={() =>
-            titleOrigin?.element?.isConnected ? titleOrigin.element : false
-          }
-        >
-          {content}
-        </DetailsDrawer>
-      ) : (
-        <main className="pb-8">
-          <div className="mx-auto w-full max-w-6xl px-6 pt-4">
-            <Button variant="ghost" size="sm" onClick={goBack}>
-              <HugeiconsIcon icon={ArrowLeft01Icon} />
-              {titleOrigin ? "Back" : "Discover"}
-            </Button>
-          </div>
-          {content}
-        </main>
-      )}
+      {drawer ? content : <main className="pb-8">{content}</main>}
     </>
   )
 }

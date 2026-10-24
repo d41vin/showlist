@@ -1,3 +1,5 @@
+import { BrowseDrawer } from "@/components/browse-drawer"
+
 export default function BrowseLayout({
   children,
   drawer,
@@ -9,6 +11,7 @@ export default function BrowseLayout({
     <>
       {children}
       {drawer}
+      <BrowseDrawer />
     </>
   )
 }

@@ -35,12 +35,16 @@ export function RailScroller({
   autoAdvanceMs,
   pagination = true,
   paged = false,
+  controlsInset = false,
+  paginationOverlay = false,
 }: {
   children: React.ReactNode
   className?: string
   autoAdvanceMs?: number
   pagination?: boolean
   paged?: boolean
+  controlsInset?: boolean
+  paginationOverlay?: boolean
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const railRef = useRef<HTMLDivElement>(null)
@@ -77,12 +81,20 @@ export function RailScroller({
     if (el === null) return
     setAtStart(el.scrollLeft <= 0)
     setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1)
-    const pages = Math.max(1, Math.round(el.scrollWidth / el.clientWidth))
+    if (el.clientWidth === 0) return
+    const pages = Math.max(
+      1,
+      paged
+        ? el.children.length
+        : Math.ceil((el.scrollWidth - 1) / el.clientWidth)
+    )
     setPageCount(pages)
     setActivePage(
-      Math.min(pages - 1, Math.round(el.scrollLeft / el.clientWidth))
+      el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+        ? pages - 1
+        : Math.min(pages - 1, Math.round(el.scrollLeft / el.clientWidth))
     )
-  }, [])
+  }, [paged])
 
   useEffect(() => {
     const el = railRef.current
@@ -92,8 +104,9 @@ export function RailScroller({
     // both change whether the rail overflows — recheck on either.
     const observer = new ResizeObserver(updateEnds)
     observer.observe(el)
+    for (const child of el.children) observer.observe(child)
     return () => observer.disconnect()
-  }, [updateEnds])
+  }, [updateEnds, children])
 
   const nudge = (direction: 1 | -1) => {
     const el = railRef.current
@@ -269,13 +282,14 @@ export function RailScroller({
         aria-label="Scroll left"
         disabled={atStart}
         onClick={() => nudge(-1)}
-        className={cn(arrowClass, "-left-4")}
+        className={cn(arrowClass, controlsInset ? "left-3" : "-left-4")}
       >
         <HugeiconsIcon icon={ArrowLeft01Icon} />
       </button>
       <button
         type="button"
         aria-label={atEnd ? "Rewind to the first slide" : "Scroll right"}
+        disabled={atStart && atEnd}
         onClick={() => {
           if (atEnd) {
             rewindToStart()
@@ -283,14 +297,19 @@ export function RailScroller({
             nudge(1)
           }
         }}
-        className={cn(arrowClass, "-right-4")}
+        className={cn(arrowClass, controlsInset ? "right-3" : "-right-4")}
       >
         {/* The control never disappears: at the end it becomes a rewind
             (double-left) that returns to the first slide. */}
         <HugeiconsIcon icon={atEnd ? ArrowLeftDoubleIcon : ArrowRight01Icon} />
       </button>
       {pagination && (
-        <div className="mt-2.5 flex min-h-8 items-center justify-center gap-2">
+        <div
+          className={cn(
+            "flex min-h-8 items-center justify-center gap-2",
+            paginationOverlay ? "absolute inset-x-0 bottom-3" : "mt-2.5"
+          )}
+        >
           {pageCount > 1 && (
             <>
               <div className="flex h-8 items-center gap-1.5 rounded-full bg-black/60 px-3 backdrop-blur">

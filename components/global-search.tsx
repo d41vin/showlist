@@ -7,13 +7,14 @@ import { useEffect, useRef } from "react"
 import { useNavigationState } from "@/components/navigation-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { clearEntitySearch } from "@/lib/entity-search"
 import { replaceSearchUrl } from "@/lib/navigation"
 
 export function GlobalSearch() {
   const pathname = usePathname()
   const params = useSearchParams()
   const router = useRouter()
-  const { searchOrigin, captureSearchOrigin, rememberSearch } =
+  const { searchOrigin, captureSearchOrigin, rememberSearch, restoreOrigin } =
     useNavigationState()
   const inputRef = useRef<HTMLInputElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -43,10 +44,9 @@ export function GlobalSearch() {
     else if (closing.current) {
       closing.current = false
       triggerRef.current?.focus({ preventScroll: true })
-      if (closingOrigin.current)
-        window.scrollTo({ top: closingOrigin.current.scrollY })
+      if (closingOrigin.current) restoreOrigin(closingOrigin.current)
     }
-  }, [active])
+  }, [active, restoreOrigin])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -68,7 +68,7 @@ export function GlobalSearch() {
         variant="ghost"
         size="icon-sm"
         onClick={openSearch}
-        aria-label="Search movies and TV"
+        aria-label="Search movies and series"
         aria-keyshortcuts="Control+k Meta+k"
       >
         <HugeiconsIcon icon={Search01Icon} />
@@ -96,11 +96,15 @@ export function GlobalSearch() {
         autoComplete="off"
         value={query}
         maxLength={200}
-        aria-label="Search movies, TV and your library"
-        placeholder="Search movies & TV…"
+        aria-label="Search movies, series and your library"
+        placeholder="Search movies & series"
         className="pr-10 pl-9"
         onChange={(event) => {
           const next = new URLSearchParams(params.toString())
+          if (["entity", "id", "name", "credit"].some((key) => next.has(key))) {
+            clearEntitySearch(next)
+            next.delete("sort")
+          }
           if (event.target.value) next.set("q", event.target.value)
           else next.delete("q")
           next.delete("mode")
@@ -113,16 +117,17 @@ export function GlobalSearch() {
           }
         }}
       />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="absolute top-1/2 right-1 -translate-y-1/2"
-        aria-label="Close search"
-        onClick={closeSearch}
-      >
-        <HugeiconsIcon icon={Cancel01Icon} />
-      </Button>
+      <div className="absolute inset-y-0 right-1 flex items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close search"
+          onClick={closeSearch}
+        >
+          <HugeiconsIcon icon={Cancel01Icon} />
+        </Button>
+      </div>
     </form>
   )
 }

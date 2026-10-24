@@ -31,7 +31,7 @@ export default function RootLayout({
       lang="en"
       suppressHydrationWarning
       className={cn(
-        "antialiased",
+        "[scrollbar-gutter:stable] antialiased",
         fontMono.variable,
         "font-sans",
         inter.variable

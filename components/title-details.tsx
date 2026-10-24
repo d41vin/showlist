@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  ArrowLeft01Icon,
   Cancel01Icon,
   ImageNotFound01Icon,
   PlayIcon,
@@ -21,7 +22,13 @@ import {
 
 import { EpisodesSection } from "@/components/episodes-section"
 import { ItemActions } from "@/components/item-actions"
-import { useNavigationState } from "@/components/navigation-state"
+import { MediaLink } from "@/components/media-link"
+import {
+  useNavigationState,
+  useRetainedState,
+} from "@/components/navigation-state"
+import { RailScroller } from "@/components/rail-scroller"
+import { TitleMetadata, type TitleExtras } from "@/components/title-metadata"
 import { Button } from "@/components/ui/button"
 import { DrawerDescription, DrawerTitle } from "@/components/ui/drawer"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -35,7 +42,6 @@ import {
   mediaHref,
   mediaKey,
   tmdbBackdropUrl,
-  tmdbLogoUrl,
   tmdbPosterUrl,
   type MediaItem,
 } from "@/lib/media"
@@ -47,26 +53,14 @@ type TitleDetailsProps = {
   data: ShowDetails
   variant: "page" | "drawer"
   onClose?: () => void
+  onBack?: () => void
 }
 
 // Stop playback on every close path while preserving the drawer exit animation.
 export const TitleDetailsOpenContext = createContext(true)
 
-export function TitleDetails({
-  item,
-  data,
-  variant,
-  onClose,
-}: TitleDetailsProps) {
-  return (
-    <TitleDetailsContent
-      key={mediaKey(item)}
-      item={item}
-      data={data}
-      variant={variant}
-      onClose={onClose}
-    />
-  )
+export function TitleDetails(props: TitleDetailsProps) {
+  return <TitleDetailsContent key={mediaKey(props.item)} {...props} />
 }
 
 function TitleDetailsContent({
@@ -74,12 +68,14 @@ function TitleDetailsContent({
   data,
   variant,
   onClose,
+  onBack,
 }: TitleDetailsProps) {
   const { isAuthenticated } = useConvexAuth()
   const stateByKey = useItemStateMap(isAuthenticated)
   const collections = useCollectionSummaries(isAuthenticated)
   const recommendationsAction = useAction(api.tmdb.recommendations)
   const videosAction = useAction(api.tmdb.videos)
+  const extrasAction = useAction(api.tmdb.titleExtras)
   const drawerOpen = useContext(TitleDetailsOpenContext)
   const isDrawer = variant === "drawer"
   const active = !isDrawer || drawerOpen
@@ -87,14 +83,26 @@ function TitleDetailsContent({
   const currentKey = mediaKey(item)
   const titleId = useId()
   const overviewId = useId()
+  const heroId = useId()
   const scrollRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
-  const stopTrailerRef = useRef<HTMLButtonElement>(null)
+  const heroRef = useRef<HTMLDivElement>(null)
 
-  const [recs, setRecs] = useState<MediaItem[] | null>(null)
+  const [recs, setRecs] = useRetainedState<MediaItem[] | null>(
+    `title:${currentKey}:recommendations`,
+    null
+  )
   const [recsFailed, setRecsFailed] = useState(false)
-  const [trailer, setTrailer] = useState<Trailer | undefined>(undefined)
+  const [trailer, setTrailer] = useRetainedState<Trailer | undefined>(
+    `title:${currentKey}:trailer`,
+    undefined
+  )
   const [trailerFailed, setTrailerFailed] = useState(false)
+  const [extras, setExtras] = useRetainedState<TitleExtras | undefined>(
+    `title:${currentKey}:extras`,
+    undefined
+  )
+  const [extrasFailed, setExtrasFailed] = useState(false)
   const [playing, setPlaying] = useState(false)
 
   if (playing && (!active || !isAuthenticated)) {
@@ -102,21 +110,15 @@ function TitleDetailsContent({
   }
 
   useEffect(() => {
-    if (!active) return
-    scrollRef.current?.scrollTo({ top: 0 })
-    titleRef.current?.focus({ preventScroll: true })
+    if (active) titleRef.current?.focus({ preventScroll: true })
   }, [active])
-
-  useEffect(() => {
-    if (playing) stopTrailerRef.current?.focus({ preventScroll: true })
-  }, [playing])
 
   useEffect(() => {
     if (!active || !isAuthenticated || recs !== null || recsFailed) return
     let cancelled = false
     recommendationsAction({ mediaType, tmdbId })
-      .then((items) => {
-        if (!cancelled) setRecs(items)
+      .then((result) => {
+        if (!cancelled) setRecs(result.items)
       })
       .catch(() => {
         if (!cancelled) setRecsFailed(true)
@@ -132,6 +134,7 @@ function TitleDetailsContent({
     recs,
     recsFailed,
     recommendationsAction,
+    setRecs,
   ])
 
   useEffect(() => {
@@ -157,76 +160,85 @@ function TitleDetailsContent({
     trailer,
     trailerFailed,
     videosAction,
+    setTrailer,
   ])
 
-  const header = (
-    <header
-      className={
-        isDrawer
-          ? "flex min-w-0 shrink-0 items-center gap-2 px-4 py-2"
-          : "mx-auto flex w-full max-w-2xl items-center gap-2 px-6 py-4"
-      }
-    >
-      {isDrawer ? (
-        <>
-          <DrawerTitle
-            ref={titleRef}
-            id={titleId}
-            tabIndex={-1}
-            className="min-w-0 flex-1 truncate"
-            title={item.title}
-          >
-            {item.title}
-          </DrawerTitle>
-          <DrawerDescription className="sr-only">
-            {item.mediaType === "movie" ? "Movie" : "Show"}
-            {item.year ? ` · ${item.year}` : ""}. Details and watch history.
-          </DrawerDescription>
-        </>
-      ) : (
-        <h1
-          ref={titleRef}
-          id={titleId}
-          tabIndex={-1}
-          className="min-w-0 flex-1 scroll-mt-20 text-2xl font-bold tracking-tight break-words"
-        >
-          {item.title}
-        </h1>
-      )}
-      {playing && (
-        <Button
-          ref={stopTrailerRef}
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            setPlaying(false)
-            titleRef.current?.focus({ preventScroll: true })
-          }}
-        >
-          Stop trailer
-        </Button>
-      )}
-      {isDrawer && (
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label="Close details"
-          onClick={() => {
-            setPlaying(false)
-            onClose?.()
-          }}
-        >
-          <HugeiconsIcon icon={Cancel01Icon} />
-          Close
-        </Button>
-      )}
-    </header>
-  )
+  // Extras never block the base title, trailer, or recommendations.
+  useEffect(() => {
+    if (!active || !isAuthenticated || extras !== undefined || extrasFailed) {
+      return
+    }
+    let cancelled = false
+    extrasAction({ mediaType, tmdbId })
+      .then((result) => {
+        if (!cancelled) setExtras(result)
+      })
+      .catch(() => {
+        if (!cancelled) setExtrasFailed(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    active,
+    isAuthenticated,
+    mediaType,
+    tmdbId,
+    extras,
+    extrasFailed,
+    extrasAction,
+    setExtras,
+  ])
+
+  const backdrops = [
+    ...new Set(
+      [data.backdropPath, ...(extras?.backdrops ?? [])].filter(
+        (path): path is string => Boolean(path)
+      )
+    ),
+  ].slice(0, 10)
+  const OverviewHeading = isDrawer ? "h3" : "h2"
 
   const content = (
     <>
-      <div className="relative h-[clamp(15rem,38vw,25rem)] max-h-[55dvh] w-full overflow-hidden bg-muted">
-        {playing && trailer ? (
+      <div ref={heroRef} id={heroId} className="relative w-full bg-muted">
+        {/* Keep the gallery mounted, including its scroll position, during playback. */}
+        <div
+          className={playing ? "invisible" : undefined}
+          aria-hidden={playing}
+          inert={playing}
+        >
+          <div role="region" aria-label={`${item.title} artwork`}>
+            <RailScroller
+              paged
+              controlsInset
+              paginationOverlay
+              className="snap-x snap-mandatory gap-0 pb-0"
+            >
+              {backdrops.length > 0 ? (
+                backdrops.map((path, index) => (
+                  <ArtworkSlide
+                    key={path}
+                    path={path}
+                    title={item.title}
+                    index={index}
+                    eager={path === data.backdropPath}
+                    isDrawer={isDrawer}
+                  />
+                ))
+              ) : (
+                <ArtworkSlide
+                  path={null}
+                  title={item.title}
+                  index={0}
+                  eager={false}
+                  isDrawer={isDrawer}
+                />
+              )}
+            </RailScroller>
+          </div>
+        </div>
+        {playing && trailer && (
           <iframe
             src={`https://www.youtube-nocookie.com/embed/${trailer.key}?autoplay=1&rel=0`}
             title={`${item.title}: ${trailer.name}`}
@@ -234,86 +246,54 @@ function TitleDetailsContent({
             allowFullScreen
             className="absolute inset-0 size-full bg-black"
           />
-        ) : (
-          <>
-            {data.backdropPath && (
-              <Image
-                src={tmdbBackdropUrl(data.backdropPath, "w1280")}
-                alt=""
-                fill
-                loading="eager"
-                sizes={isDrawer ? "calc(100vw - 18px)" : "100vw"}
-                className="object-cover"
-              />
-            )}
-            <div
-              aria-hidden
-              className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent"
-            />
-            <div className="absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-2xl flex-col gap-2 px-6 pb-5">
-              {data.logoPath ? (
-                <Image
-                  src={tmdbLogoUrl(data.logoPath)}
-                  alt={item.title}
-                  width={260}
-                  height={96}
-                  sizes="(max-width: 480px) 60vw, 260px"
-                  className="max-h-16 w-auto max-w-[65%] self-start object-contain drop-shadow-lg"
-                  loading="eager"
-                />
-              ) : (
-                <p className="line-clamp-3 text-2xl font-bold tracking-tight break-words drop-shadow-lg">
-                  {item.title}
-                </p>
-              )}
-              <HeroFacts data={data} item={item} />
-              {data.genres.length > 0 && (
-                <div className="mt-0.5 flex flex-wrap gap-1.5">
-                  {data.genres.slice(0, 4).map((genre) => (
-                    <span
-                      key={genre}
-                      className="rounded-full border border-border/70 px-2.5 py-0.5 text-xs text-foreground/85 backdrop-blur-sm"
-                    >
-                      {genre}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
         )}
       </div>
 
       <div className="mx-auto w-full max-w-2xl min-w-0 pb-6">
-        {!isDrawer && <h2 className="sr-only">Title details</h2>}
-        {isAuthenticated && (
-          <div className="flex flex-wrap items-center gap-1.5 px-6 pt-4">
-            <ItemActions
-              item={item}
-              state={stateByKey.get(currentKey)}
-              collections={collections}
-              layout="row"
-            />
-            {trailer && (
+        <div className="flex flex-col gap-2 px-6 pt-4">
+          {isAuthenticated && (
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              <ItemActions
+                item={item}
+                state={stateByKey.get(currentKey)}
+                collections={collections}
+                layout="row"
+              />
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {isAuthenticated && trailer && (
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={playing}
+                aria-controls={heroId}
                 onClick={() => {
-                  setPlaying(true)
-                  if (isDrawer) {
-                    scrollRef.current?.scrollTo({ top: 0 })
-                  } else {
-                    titleRef.current?.scrollIntoView({ block: "start" })
+                  setPlaying((value) => !value)
+                  if (!playing) {
+                    if (isDrawer) scrollRef.current?.scrollTo({ top: 0 })
+                    else heroRef.current?.scrollIntoView({ block: "start" })
                   }
                 }}
               >
-                <HugeiconsIcon icon={PlayIcon} />
-                Play trailer
+                <HugeiconsIcon icon={playing ? Cancel01Icon : PlayIcon} />
+                {playing ? "Stop trailer" : "Play trailer"}
               </Button>
             )}
-            {trailerFailed && (
-              <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={isDrawer ? "Close details" : "Back"}
+              onClick={() => {
+                setPlaying(false)
+                if (isDrawer) onClose?.()
+                else onBack?.()
+              }}
+            >
+              <HugeiconsIcon icon={isDrawer ? Cancel01Icon : ArrowLeft01Icon} />
+              {isDrawer ? "Close" : "Back"}
+            </Button>
+            {isAuthenticated && trailerFailed && (
+              <>
                 <p role="status" className="text-sm text-muted-foreground">
                   Couldn&rsquo;t load trailer.
                 </p>
@@ -324,26 +304,70 @@ function TitleDetailsContent({
                 >
                   Retry trailer
                 </Button>
-              </div>
+              </>
             )}
           </div>
-        )}
+        </div>
+
+        <header className="flex flex-col gap-2 px-6 pt-5">
+          {isDrawer ? (
+            <>
+              <DrawerTitle
+                ref={titleRef}
+                id={titleId}
+                tabIndex={-1}
+                className="text-2xl break-words"
+              >
+                {item.title}
+              </DrawerTitle>
+              <DrawerDescription className="sr-only">
+                {item.mediaType === "movie" ? "Movie" : "Show"}
+                {item.year ? ` · ${item.year}` : ""}. Details and watch history.
+              </DrawerDescription>
+            </>
+          ) : (
+            <h1
+              ref={titleRef}
+              id={titleId}
+              tabIndex={-1}
+              className="text-2xl font-semibold break-words"
+            >
+              {item.title}
+            </h1>
+          )}
+          <TitleFacts data={data} item={item} />
+        </header>
 
         <section aria-labelledby={overviewId} className="px-6 py-4 text-sm">
-          <h3 id={overviewId} className="sr-only">
+          <OverviewHeading id={overviewId} className="sr-only">
             Overview
-          </h3>
+          </OverviewHeading>
           <div className="flex flex-col gap-2">
             {data.tagline && (
               <p className="text-muted-foreground italic">{data.tagline}</p>
             )}
             {data.overview ? (
-              <p className="text-[15px] leading-relaxed">{data.overview}</p>
+              <p className="text-sm leading-relaxed">{data.overview}</p>
             ) : (
               <p className="text-muted-foreground">No overview available.</p>
             )}
           </div>
         </section>
+
+        <TitleMetadata
+          item={item}
+          data={data}
+          extras={extras}
+          failed={extrasFailed}
+          loading={
+            active && isAuthenticated && extras === undefined && !extrasFailed
+          }
+          onRetry={() => {
+            setExtras(undefined)
+            setExtrasFailed(false)
+          }}
+          onNavigate={() => setPlaying(false)}
+        />
 
         {isAuthenticated &&
           item.mediaType === "tv" &&
@@ -353,6 +377,7 @@ function TitleDetailsContent({
 
         {isAuthenticated && (
           <MoreLikeThis
+            item={item}
             recs={recs}
             failed={recsFailed}
             variant={variant}
@@ -366,35 +391,74 @@ function TitleDetailsContent({
 
   if (isDrawer) {
     return (
-      <>
-        {header}
-        <ScrollArea
-          className="min-h-0 w-full min-w-0 flex-1"
-          viewportRef={scrollRef}
-        >
-          {content}
-        </ScrollArea>
-      </>
+      <ScrollArea
+        className="min-h-0 w-full min-w-0 flex-1"
+        viewportRef={scrollRef}
+      >
+        {content}
+      </ScrollArea>
     )
   }
 
   return (
     <article aria-labelledby={titleId} className="w-full min-w-0">
-      {header}
       {content}
     </article>
   )
 }
 
-function HeroFacts({ data, item }: { data: ShowDetails; item: MediaItem }) {
+function ArtworkSlide({
+  path,
+  title,
+  index,
+  eager,
+  isDrawer,
+}: {
+  path: string | null
+  title: string
+  index: number
+  eager: boolean
+  isDrawer: boolean
+}) {
+  const [failed, setFailed] = useState(false)
+
+  return (
+    <div className="relative h-[clamp(15rem,38vw,25rem)] max-h-[55dvh] w-full min-w-0 shrink-0 snap-start">
+      {path && !failed ? (
+        <Image
+          src={tmdbBackdropUrl(path, "w1280")}
+          alt={
+            index === 0
+              ? `Featured artwork for ${title}`
+              : `Backdrop artwork ${index + 1} for ${title}`
+          }
+          fill
+          loading={eager ? "eager" : "lazy"}
+          sizes={isDrawer ? "calc(100vw - 18px)" : "100vw"}
+          className="object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
+          <HugeiconsIcon
+            icon={ImageNotFound01Icon}
+            className="size-8"
+            aria-hidden
+          />
+          <p className="text-sm">Artwork unavailable for {title}.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TitleFacts({ data, item }: { data: ShowDetails; item: MediaItem }) {
   const facts: string[] = [item.mediaType === "movie" ? "Movie" : "Show"]
-  if (item.year !== null) {
-    facts.push(item.year)
-  }
+  if (item.year !== null) facts.push(item.year)
   if (data.voteAverage !== null) {
-    facts.push(`★ ${data.voteAverage.toFixed(1)}`)
+    facts.push(`TMDB ${data.voteAverage.toFixed(1)}/10`)
   }
-  if (item.mediaType === "movie" && data.runtime !== null) {
+  if (item.mediaType === "movie" && data.runtime !== null && data.runtime > 0) {
     facts.push(`${data.runtime} min`)
   }
   if (item.mediaType === "tv" && data.numberOfSeasons !== null) {
@@ -402,19 +466,14 @@ function HeroFacts({ data, item }: { data: ShowDetails; item: MediaItem }) {
       `${data.numberOfSeasons} season${data.numberOfSeasons === 1 ? "" : "s"}`
     )
   }
-  if (item.mediaType === "tv" && data.status !== null) {
-    facts.push(data.status)
-  }
+  if (item.mediaType === "tv" && data.status !== null) facts.push(data.status)
+
   return (
-    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-medium tracking-wide text-foreground/80">
+    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
       {facts.map((fact, i) => (
-        <span key={fact} className="flex items-center gap-1.5">
-          {i > 0 && (
-            <span aria-hidden className="text-foreground/30">
-              ·
-            </span>
-          )}
-          <span className="drop-shadow-sm">{fact}</span>
+        <span key={`${i}:${fact}`} className="flex items-center gap-1.5">
+          {i > 0 && <span aria-hidden>·</span>}
+          <span>{fact}</span>
         </span>
       ))}
     </p>
@@ -422,12 +481,14 @@ function HeroFacts({ data, item }: { data: ShowDetails; item: MediaItem }) {
 }
 
 function MoreLikeThis({
+  item,
   recs,
   failed,
   variant,
   onRetry,
   onNavigate,
 }: {
+  item: MediaItem
   recs: MediaItem[] | null
   failed: boolean
   variant: TitleDetailsProps["variant"]
@@ -436,16 +497,31 @@ function MoreLikeThis({
 }) {
   const headingId = useId()
   const { captureTitleOrigin, keepTitleOrigin } = useNavigationState()
+  const Heading = variant === "drawer" ? "h3" : "h2"
   if (recs !== null && recs.length === 0) return null
 
   return (
     <section aria-labelledby={headingId} className="border-t px-6 py-4">
-      <h3
-        id={headingId}
-        className="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-      >
-        More like this
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Heading id={headingId} className="text-sm font-semibold">
+          More like this
+        </Heading>
+        {recs !== null && recs.length > 0 && (
+          <Link
+            href={`${mediaHref(item)}/recommendations`}
+            replace={false}
+            scroll={variant !== "drawer"}
+            onNavigate={() => {
+              captureTitleOrigin()
+              onNavigate()
+            }}
+            aria-label={`View all recommendations for ${item.title}`}
+            className="text-sm underline underline-offset-4"
+          >
+            View all
+          </Link>
+        )}
+      </div>
       {failed ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <p role="status" className="text-sm text-muted-foreground">
@@ -460,12 +536,12 @@ function MoreLikeThis({
           <p role="status" className="sr-only">
             Loading recommendations…
           </p>
-          <div
-            aria-hidden
-            className="hide-scrollbar -mx-6 mt-3 flex gap-2.5 overflow-x-auto px-6 py-1"
-          >
+          <div aria-hidden className="mt-3 flex gap-3 overflow-hidden">
             {Array.from({ length: 6 }, (_, i) => (
-              <div key={i} className="flex w-20 shrink-0 flex-col gap-1">
+              <div
+                key={i}
+                className="flex w-28 shrink-0 flex-col gap-1 sm:w-32"
+              >
                 <Skeleton className="aspect-2/3 w-full rounded-md" />
                 <Skeleton className="h-3 w-3/4" />
               </div>
@@ -473,36 +549,39 @@ function MoreLikeThis({
           </div>
         </>
       ) : (
-        <ul className="hide-scrollbar -mx-6 mt-3 flex gap-2.5 overflow-x-auto px-6 py-1">
-          {recs.map((rec) => (
-            <li key={mediaKey(rec)} className="w-20 shrink-0">
-              <Link
-                href={mediaHref(rec)}
+        <div className="mt-3">
+          <RailScroller pagination={false} className="gap-3">
+            {recs.map((rec) => (
+              <MediaLink
+                key={mediaKey(rec)}
+                item={rec}
                 replace={variant === "drawer"}
-                scroll={variant === "drawer" ? false : undefined}
+                scroll={variant !== "drawer"}
                 onNavigate={() => {
                   if (variant === "drawer") keepTitleOrigin()
                   else captureTitleOrigin()
                   onNavigate()
                 }}
                 aria-label={`Details for ${rec.title}${rec.year ? ` (${rec.year})` : ""}`}
-                className="flex flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex w-28 shrink-0 flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-32"
               >
-                <div className="aspect-2/3 w-full overflow-hidden rounded-md bg-muted transition-[filter] hover:brightness-90">
+                <div className="aspect-2/3 w-full overflow-hidden rounded-md bg-muted">
                   {rec.posterPath ? (
                     <Image
                       src={tmdbPosterUrl(rec.posterPath)}
                       alt=""
-                      width={120}
-                      height={180}
-                      sizes="80px"
-                      className="object-cover"
+                      width={128}
+                      height={192}
+                      sizes="(min-width: 640px) 128px, 112px"
+                      loading="lazy"
+                      className="w-full object-cover"
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center text-muted-foreground">
                       <HugeiconsIcon
                         icon={ImageNotFound01Icon}
                         className="size-5"
+                        aria-hidden
                       />
                     </div>
                   )}
@@ -510,10 +589,10 @@ function MoreLikeThis({
                 <span className="w-full truncate text-xs text-muted-foreground">
                   {rec.title}
                 </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+              </MediaLink>
+            ))}
+          </RailScroller>
+        </div>
       )}
     </section>
   )

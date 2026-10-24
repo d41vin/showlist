@@ -369,11 +369,18 @@ export const title = action({
       return cached.payload as TitlePayload
     }
 
+    // Start both requests on a cold open. Only artwork is best-effort; do not
+    // wait for it before propagating a metadata failure or a hidden title.
+    const metadataPromise = tmdbFetch(`/${args.mediaType}/${args.tmdbId}`, {
+      language: "en-US",
+    })
+    const imagesPromise = tmdbFetch(
+      `/${args.mediaType}/${args.tmdbId}/images`,
+      { include_image_language: "en,null" }
+    ).catch(() => null)
     let data: Record<string, unknown>
     try {
-      data = await tmdbFetch(`/${args.mediaType}/${args.tmdbId}`, {
-        language: "en-US",
-      })
+      data = await metadataPromise
     } catch (error) {
       if (error instanceof TmdbHttpError && error.status === 404) return null
       throw error
@@ -399,10 +406,7 @@ export const title = action({
       throw new Error("Invalid TMDB title response")
     }
 
-    const imagesData = await tmdbFetch(
-      `/${args.mediaType}/${args.tmdbId}/images`,
-      { include_image_language: "en,null" }
-    ).catch(() => null)
+    const imagesData = await imagesPromise
     const imagesComplete =
       isRecord(imagesData) &&
       Array.isArray(imagesData.logos) &&
@@ -441,6 +445,260 @@ export const title = action({
             fetchedAt,
           },
         ],
+      })
+    }
+    return payload
+  },
+})
+
+const namedEntityValidator = v.object({ id: v.number(), name: v.string() })
+const creditedPersonValidator = namedEntityValidator.extend({
+  role: v.string(),
+})
+const titleExtrasValidator = v.object({
+  genres: v.array(namedEntityValidator),
+  countries: v.array(v.object({ code: v.string(), name: v.string() })),
+  companies: v.array(namedEntityValidator),
+  alternativeTitles: v.array(v.string()),
+  cast: v.array(creditedPersonValidator),
+  crew: v.array(creditedPersonValidator),
+  backdrops: v.array(v.string()),
+})
+type TitleExtras = Infer<typeof titleExtrasValidator>
+
+function records(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function namedEntities(value: unknown) {
+  const seen = new Set<number>()
+  const items: { id: number; name: string }[] = []
+  for (const row of records(value)) {
+    const name = boundedText(row.name)
+    if (!positiveId(row.id) || !name || seen.has(row.id)) continue
+    seen.add(row.id)
+    items.push({ id: row.id, name })
+    if (items.length === 50) break
+  }
+  return items
+}
+
+function creditedPeople(value: unknown, cast: boolean, aggregate: boolean) {
+  const rows = records(value)
+  // TMDB's order is billing, not popularity or episode count. Stable sorting
+  // preserves upstream order for ties and credits with no billing field.
+  const billing = (row: Record<string, unknown>) =>
+    typeof row.order === "number" &&
+    Number.isSafeInteger(row.order) &&
+    row.order >= 0
+      ? row.order
+      : Number.MAX_SAFE_INTEGER
+  if (cast) rows.sort((a, b) => billing(a) - billing(b))
+  const people = new Map<
+    number,
+    { id: number; name: string; roles: Set<string> }
+  >()
+  for (const row of rows) {
+    const name = boundedText(row.name)
+    if (
+      !positiveId(row.id) ||
+      !name ||
+      (row.adult !== undefined && row.adult !== false)
+    )
+      continue
+    let person = people.get(row.id)
+    if (!person) {
+      if (people.size === 8192) {
+        throw new Error(
+          "TMDB extras credits exceed the 8192-person array limit"
+        )
+      }
+      person = { id: row.id, name, roles: new Set() }
+      people.set(row.id, person)
+    }
+    const roleKey = cast ? "character" : "job"
+    const roles = aggregate ? records(row[cast ? "roles" : "jobs"]) : [row]
+    for (const role of roles) {
+      const label = boundedText(role[roleKey], 100)
+      if (label && person.roles.size < 10) person.roles.add(label)
+    }
+  }
+  return [...people.values()].map(({ id, name, roles }) => ({
+    id,
+    name,
+    role: [...roles].join(", ").slice(0, 300),
+  }))
+}
+
+function gallery(value: unknown): string[] {
+  const positive = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0
+  const candidates = records(value).filter((row) => {
+    const width = positive(row.width)
+    const height = positive(row.height)
+    return (
+      imagePath(row.file_path) !== null &&
+      width >= 780 &&
+      height >= 400 &&
+      width / height >= 1.3 &&
+      width / height <= 2.5
+    )
+  })
+  candidates.sort(
+    (a, b) =>
+      positive(b.vote_average) - positive(a.vote_average) ||
+      positive(b.vote_count) - positive(a.vote_count) ||
+      positive(b.width) - positive(a.width)
+  )
+  return [...new Set(candidates.map((row) => imagePath(row.file_path)!))].slice(
+    0,
+    10
+  )
+}
+
+function normalizeExtras(
+  data: Record<string, unknown>,
+  mediaType: MediaType
+): TitleExtras {
+  const creditsKey = mediaType === "movie" ? "credits" : "aggregate_credits"
+  const credits = successfulResponse(data[creditsKey]) ? data[creditsKey] : {}
+  const alternatives = successfulResponse(data.alternative_titles)
+    ? data.alternative_titles
+    : {}
+  const images = successfulResponse(data.images) ? data.images : {}
+  const displayName = boundedText(
+    mediaType === "movie" ? data.title : data.name,
+    300
+  )
+  const original = boundedText(
+    mediaType === "movie" ? data.original_title : data.original_name,
+    300
+  )
+  const aliases: string[] = []
+  const seenAliases = new Set([displayName.toLocaleLowerCase("en-US")])
+  const addAlias = (value: unknown) => {
+    const alias = boundedText(value, 300)
+    const key = alias.toLocaleLowerCase("en-US")
+    if (!alias || seenAliases.has(key) || aliases.length === 50) return
+    seenAliases.add(key)
+    aliases.push(alias)
+  }
+  addAlias(original)
+  for (const row of records(
+    alternatives[mediaType === "movie" ? "titles" : "results"]
+  ))
+    addAlias(row.title)
+
+  const countries = new Map<string, { code: string; name: string }>()
+  for (const row of records(data.production_countries)) {
+    const code =
+      typeof row.iso_3166_1 === "string" ? row.iso_3166_1.toUpperCase() : ""
+    const name = boundedText(row.name)
+    if (
+      !/^[A-Z]{2}$/.test(code) ||
+      !name ||
+      countries.has(code) ||
+      countries.size === 50
+    )
+      continue
+    countries.set(code, { code, name })
+  }
+  // TV origin countries may be present without production-country names.
+  // Use the code as a truthful fallback rather than an extra configuration fetch.
+  for (const code of Array.isArray(data.origin_country)
+    ? data.origin_country
+    : []) {
+    if (
+      typeof code === "string" &&
+      /^[A-Z]{2}$/.test(code) &&
+      !countries.has(code) &&
+      countries.size < 50
+    ) {
+      countries.set(code, { code, name: code })
+    }
+  }
+  return {
+    genres: namedEntities(data.genres),
+    countries: [...countries.values()],
+    companies: namedEntities(data.production_companies),
+    alternativeTitles: aliases,
+    cast: creditedPeople(credits.cast, true, mediaType === "tv"),
+    crew: creditedPeople(credits.crew, false, mediaType === "tv"),
+    backdrops: gallery(images.backdrops),
+  }
+}
+
+function completeAppend(value: unknown, arrays: string[]): boolean {
+  return (
+    successfulResponse(value) &&
+    arrays.every((key) => Array.isArray(value[key]))
+  )
+}
+
+// Load separately, after the main title opens. Never add these fields to the
+// details:v2 payload consumed by schedule/stats, or fetch per-episode stills.
+export const titleExtras = action({
+  args: { mediaType: mediaTypeValidator, tmdbId: v.number() },
+  returns: v.union(titleExtrasValidator, v.null()),
+  handler: async (ctx, args): Promise<TitleExtras | null> => {
+    if ((await ctx.auth.getUserIdentity()) === null)
+      throw new Error("Not signed in")
+    validateId(args.tmdbId)
+    const cacheKey = `extras:${args.mediaType}:${args.tmdbId}:v2`
+    const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
+      keys: [cacheKey],
+    })) as CacheEntry[]
+    if (
+      cached?.payload != null &&
+      Date.now() - cached.fetchedAt < DETAILS_TTL_MS
+    ) {
+      return cached.payload as TitleExtras
+    }
+    const creditsKey =
+      args.mediaType === "movie" ? "credits" : "aggregate_credits"
+    let data: Record<string, unknown>
+    try {
+      data = await tmdbFetch(`/${args.mediaType}/${args.tmdbId}`, {
+        language: "en-US",
+        append_to_response: `${creditsKey},alternative_titles,images`,
+        include_image_language: "en,null",
+      })
+    } catch (error) {
+      if (error instanceof TmdbHttpError && error.status === 404) return null
+      throw error
+    }
+    if (
+      !successfulResponse(data) ||
+      data.id !== args.tmdbId ||
+      (data.media_type !== undefined && data.media_type !== args.mediaType) ||
+      (data.adult !== undefined && typeof data.adult !== "boolean")
+    ) {
+      throw new Error("Invalid TMDB extras response")
+    }
+    if (data.adult === true) return null
+    if (!boundedText(args.mediaType === "movie" ? data.title : data.name)) {
+      throw new Error("Invalid TMDB extras response")
+    }
+    if (!completeAppend(data[creditsKey], ["cast", "crew"])) {
+      throw new Error(`Incomplete TMDB extras response: ${creditsKey}`)
+    }
+    if (
+      !completeAppend(data.alternative_titles, [
+        args.mediaType === "movie" ? "titles" : "results",
+      ])
+    ) {
+      throw new Error("Incomplete TMDB extras response: alternative_titles")
+    }
+    if (!completeAppend(data.images, ["backdrops"])) {
+      throw new Error("Incomplete TMDB extras response: images")
+    }
+    const payload = normalizeExtras(data, args.mediaType)
+    // Oversized extras must retain all credits without replacing the cache.
+    if (
+      new TextEncoder().encode(JSON.stringify(payload)).byteLength <= 700_000
+    ) {
+      await ctx.runMutation(internal.tmdb_cache.putBatch, {
+        entries: [{ key: cacheKey, payload, fetchedAt: Date.now() }],
       })
     }
     return payload
@@ -517,17 +775,123 @@ export const tvSeason = action({
   },
 })
 
-// Native TMDB recommendations for one title — "More like this" in the
-// details drawer. No LLM involved.
+const cataloguePageValidator = v.object({
+  items: v.array(searchResultValidator),
+  hasMore: v.boolean(),
+})
+type CataloguePage = Infer<typeof cataloguePageValidator>
+type MediaType = "movie" | "tv"
+
+function positiveId(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+}
+
+function validateId(id: number) {
+  if (!positiveId(id)) throw new Error("Invalid TMDB ID")
+}
+
+function validatePage(page = 1) {
+  if (!Number.isSafeInteger(page) || page < 1 || page > 500) {
+    throw new Error("Invalid page (expected 1..500)")
+  }
+  return page
+}
+
+function boundedText(value: unknown, limit = 200): string {
+  return typeof value === "string" ? value.trim().slice(0, limit) : ""
+}
+
+function imagePath(value: unknown): string | null {
+  return typeof value === "string" &&
+    value.length <= 200 &&
+    /^\/[a-z0-9_-]+\.(?:jpg|jpeg|png|webp)$/i.test(value)
+    ? value
+    : null
+}
+
+function dateOf(value: unknown): string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return ""
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) &&
+    new Date(timestamp).toISOString().slice(0, 10) === value
+    ? value
+    : ""
+}
+
+function catalogueItem(
+  raw: unknown,
+  inferredType?: MediaType
+): SearchResultPayload | null {
+  if (!isRecord(raw) || !positiveId(raw.id)) return null
+  const mediaType = raw.media_type === undefined ? inferredType : raw.media_type
+  if (
+    (mediaType !== "movie" && mediaType !== "tv") ||
+    (inferredType !== undefined && mediaType !== inferredType) ||
+    (raw.adult !== undefined && raw.adult !== false)
+  )
+    return null
+  const title = boundedText(mediaType === "movie" ? raw.title : raw.name, 300)
+  if (!title) return null
+  const date = dateOf(
+    mediaType === "movie" ? raw.release_date : raw.first_air_date
+  )
+  return {
+    tmdbId: raw.id,
+    mediaType,
+    title,
+    posterPath: imagePath(raw.poster_path),
+    year: date ? date.slice(0, 4) : null,
+  }
+}
+
+function successfulResponse(value: unknown): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    (value.success === undefined || value.success === true) &&
+    (value.status_code === undefined || value.status_code === 1)
+  )
+}
+
+function cataloguePage(
+  data: unknown,
+  mediaType: MediaType,
+  page: number
+): CataloguePage {
+  if (!successfulResponse(data) || !Array.isArray(data.results)) {
+    throw new Error("Invalid TMDB catalogue response")
+  }
+  const items: SearchResultPayload[] = []
+  const seen = new Set<number>()
+  // TMDB pages contain at most 20 titles; also bound malformed upstream pages.
+  for (const raw of data.results) {
+    const item = catalogueItem(raw, mediaType)
+    if (!item || seen.has(item.tmdbId)) continue
+    seen.add(item.tmdbId)
+    items.push(item)
+    if (items.length === 20) break
+  }
+  const totalPages =
+    typeof data.total_pages === "number" && Number.isFinite(data.total_pages)
+      ? Math.max(0, Math.min(Math.floor(data.total_pages), 500))
+      : page
+  return { items, hasMore: page < totalPages }
+}
+
+// Native TMDB recommendations. Page/version are part of the key so legacy
+// array payloads can never be mistaken for the new pagination envelope.
 export const recommendations = action({
-  args: { mediaType: mediaTypeValidator, tmdbId: v.number() },
-  returns: v.array(searchResultValidator),
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
+  args: {
+    mediaType: mediaTypeValidator,
+    tmdbId: v.number(),
+    page: v.optional(v.number()),
+  },
+  returns: cataloguePageValidator,
+  handler: async (ctx, args): Promise<CataloguePage> => {
+    if ((await ctx.auth.getUserIdentity()) === null)
       throw new Error("Not signed in")
-    }
-    const cacheKey = `recs:${args.mediaType}:${args.tmdbId}:v1`
+    validateId(args.tmdbId)
+    const page = validatePage(args.page)
+    const cacheKey = `recs:${args.mediaType}:${args.tmdbId}:${page}:v2`
     const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
       keys: [cacheKey],
     })) as CacheEntry[]
@@ -535,20 +899,200 @@ export const recommendations = action({
       cached?.payload != null &&
       Date.now() - cached.fetchedAt < RECOMMENDATIONS_TTL_MS
     ) {
-      return cached.payload as SearchResultPayload[]
+      return cached.payload as CataloguePage
     }
-
     const data = await tmdbFetch(
       `/${args.mediaType}/${args.tmdbId}/recommendations`,
-      { language: "en-US" }
+      { language: "en-US", page: String(page) }
     )
-    const results = Array.isArray(data.results) ? data.results : []
-    const items = normalizeResults(results, args.mediaType)
-
+    const payload = cataloguePage(data, args.mediaType, page)
     await ctx.runMutation(internal.tmdb_cache.putBatch, {
-      entries: [{ key: cacheKey, payload: items, fetchedAt: Date.now() }],
+      entries: [{ key: cacheKey, payload, fetchedAt: Date.now() }],
     })
-    return items
+    return payload
+  },
+})
+
+type PersonCredit = {
+  item: SearchResultPayload
+  popularity: number
+  date: string
+  cast: boolean
+  crew: boolean
+}
+const PERSON_CREDITS_TTL_MS = 24 * 60 * 60 * 1000
+
+function personCredits(data: Record<string, unknown>): PersonCredit[] {
+  const credits = new Map<string, PersonCredit>()
+  for (const kind of ["cast", "crew"] as const) {
+    for (const raw of records(data[kind])) {
+      // Unlike discover, combined_credits MUST identify each row's type.
+      const item = catalogueItem(raw)
+      if (!item) continue
+      const key = `${item.mediaType}:${item.tmdbId}`
+      const popularity =
+        typeof raw.popularity === "number" && Number.isFinite(raw.popularity)
+          ? Math.max(0, raw.popularity)
+          : 0
+      const date = dateOf(
+        item.mediaType === "movie" ? raw.release_date : raw.first_air_date
+      )
+      const existing = credits.get(key)
+      if (existing) {
+        existing[kind] = true
+        existing.popularity = Math.max(existing.popularity, popularity)
+        if (!existing.date && date) {
+          existing.date = date
+          existing.item.year = date.slice(0, 4)
+        }
+      } else {
+        credits.set(key, {
+          item,
+          popularity,
+          date,
+          cast: kind === "cast",
+          crew: kind === "crew",
+        })
+      }
+    }
+  }
+  return [...credits.values()]
+}
+
+export const entitySearch = action({
+  args: {
+    kind: v.union(
+      v.literal("genre"),
+      v.literal("country"),
+      v.literal("company"),
+      v.literal("person")
+    ),
+    id: v.string(),
+    mediaType: v.union(v.literal("all"), mediaTypeValidator),
+    credit: v.optional(v.union(v.literal("cast"), v.literal("crew"))),
+    sort: v.union(v.literal("popularity"), v.literal("newest")),
+    page: v.optional(v.number()),
+  },
+  returns: cataloguePageValidator,
+  handler: async (ctx, args): Promise<CataloguePage> => {
+    if ((await ctx.auth.getUserIdentity()) === null)
+      throw new Error("Not signed in")
+    const page = validatePage(args.page)
+    const id = args.kind === "country" ? args.id.toUpperCase() : args.id
+    if (args.kind === "country") {
+      if (!/^[A-Za-z]{2}$/.test(args.id))
+        throw new Error("Invalid country code")
+    } else if (!/^[1-9]\d{0,15}$/.test(id) || !positiveId(Number(id))) {
+      throw new Error("Invalid entity ID")
+    }
+    if (args.kind === "genre" && args.mediaType === "all") {
+      throw new Error("Genre search requires movie or tv")
+    }
+    if (args.credit !== undefined && args.kind !== "person") {
+      throw new Error("Credit filter requires a person")
+    }
+
+    if (args.kind === "person") {
+      // TV discover does not support with_people/with_cast/with_crew. One
+      // combined_credits request covers both media types and every local page.
+      const cacheKey = `person-credits:${id}:v1`
+      const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
+        keys: [cacheKey],
+      })) as CacheEntry[]
+      let credits: PersonCredit[]
+      if (
+        cached?.payload != null &&
+        Date.now() - cached.fetchedAt < PERSON_CREDITS_TTL_MS
+      ) {
+        credits = cached.payload as PersonCredit[]
+      } else {
+        let data: Record<string, unknown>
+        try {
+          data = await tmdbFetch(`/person/${id}/combined_credits`, {
+            language: "en-US",
+          })
+        } catch (error) {
+          if (error instanceof TmdbHttpError && error.status === 404)
+            return { items: [], hasMore: false }
+          throw error
+        }
+        if (!successfulResponse(data) || data.id !== Number(id)) {
+          throw new Error("Invalid TMDB person credits response")
+        }
+        credits = personCredits(data)
+        // Do not truncate a prolific person's filmography just to cache it.
+        // Oversized responses still paginate correctly, but bypass storage.
+        if (
+          completeAppend(data, ["cast", "crew"]) &&
+          credits.length <= 1000 &&
+          new TextEncoder().encode(JSON.stringify(credits)).byteLength <=
+            700_000
+        ) {
+          await ctx.runMutation(internal.tmdb_cache.putBatch, {
+            entries: [
+              { key: cacheKey, payload: credits, fetchedAt: Date.now() },
+            ],
+          })
+        }
+      }
+      const selected = credits.filter(
+        (row) =>
+          (args.mediaType === "all" || row.item.mediaType === args.mediaType) &&
+          (args.credit === undefined || row[args.credit])
+      )
+      selected.sort((a, b) => {
+        const newest = b.date.localeCompare(a.date)
+        const popular = b.popularity - a.popularity
+        return (
+          (args.sort === "newest" ? newest || popular : popular || newest) ||
+          a.item.mediaType.localeCompare(b.item.mediaType) ||
+          a.item.tmdbId - b.item.tmdbId
+        )
+      })
+      return {
+        items: selected
+          .slice((page - 1) * 20, page * 20)
+          .map((row) => row.item),
+        hasMore: page < 500 && page * 20 < selected.length,
+      }
+    }
+
+    const types: MediaType[] =
+      args.mediaType === "all" ? ["movie", "tv"] : [args.mediaType]
+    const pages = await Promise.all(
+      types.map(async (mediaType) => {
+        const filter =
+          args.kind === "genre"
+            ? "with_genres"
+            : args.kind === "company"
+              ? "with_companies"
+              : "with_origin_country"
+        const data = await tmdbFetch(`/discover/${mediaType}`, {
+          language: "en-US",
+          include_adult: "false",
+          page: String(page),
+          sort_by:
+            args.sort === "popularity"
+              ? "popularity.desc"
+              : mediaType === "movie"
+                ? "primary_release_date.desc"
+                : "first_air_date.desc",
+          [filter]: id,
+        })
+        return cataloguePage(data, mediaType, page)
+      })
+    )
+    const items: SearchResultPayload[] = []
+    // Keep each endpoint's sort order while giving both media types room.
+    for (
+      let i = 0;
+      i < Math.max(...pages.map((result) => result.items.length));
+      i++
+    ) {
+      for (const result of pages)
+        if (result.items[i]) items.push(result.items[i])
+    }
+    return { items, hasMore: pages.some((result) => result.hasMore) }
   },
 })
 

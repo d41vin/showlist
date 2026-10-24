@@ -28,8 +28,7 @@ export function AppHeader() {
     <header>
       <div
         className={cn(
-          "mx-auto grid min-h-14 w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:px-6",
-          searching && "grid-cols-1 sm:grid-cols-1 lg:grid-cols-[1fr_auto_1fr]"
+          "mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
         )}
       >
         <Link
@@ -43,10 +42,7 @@ export function AppHeader() {
         </Link>
         <nav
           aria-label="Main navigation"
-          className={cn(
-            "col-span-2 row-start-2 flex justify-center gap-5 sm:col-span-1 sm:col-start-2 sm:row-start-1",
-            searching && "hidden lg:flex"
-          )}
+          className="col-span-2 row-start-2 flex justify-center gap-5 lg:col-span-1 lg:col-start-2 lg:row-start-1"
         >
           {links.map(({ href, label }) => {
             const active = pathname === href
@@ -69,8 +65,8 @@ export function AppHeader() {
         </nav>
         <div
           className={cn(
-            "col-start-2 row-start-1 flex items-center justify-end gap-2 sm:col-start-3",
-            searching && "col-start-1 sm:col-start-1 lg:col-start-3"
+            "col-start-2 row-start-1 flex h-9 min-w-0 items-center justify-end gap-2 lg:col-start-3",
+            searching && "col-span-2 col-start-1 lg:col-span-1 lg:col-start-3"
           )}
         >
           <Show when="signed-in">

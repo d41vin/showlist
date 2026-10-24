@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest"
 import { mediaHref } from "./media"
-import { parseMediaId, replaceSearchUrl } from "./navigation"
+import { parseMediaId, parseTitlePath, replaceSearchUrl } from "./navigation"
 
 test.each(["1", "603", "1399", String(Number.MAX_SAFE_INTEGER)])(
   "parses canonical title ID %s",
@@ -32,6 +32,36 @@ test.each([
 test("canonical links distinguish movies and TV with the same ID", () => {
   expect(mediaHref({ mediaType: "movie", tmdbId: 603 })).toBe("/movie/603")
   expect(mediaHref({ mediaType: "tv", tmdbId: 603 })).toBe("/tv/603")
+})
+
+test.each(["movie", "tv"])(
+  "recognizes %s title and recommendation drawer routes",
+  (mediaType) => {
+    expect(parseTitlePath(`/${mediaType}/603`)).toEqual({
+      mediaType,
+      tmdbId: 603,
+      recommendations: false,
+    })
+    expect(parseTitlePath(`/${mediaType}/603/recommendations`)).toEqual({
+      mediaType,
+      tmdbId: 603,
+      recommendations: true,
+    })
+  }
+)
+
+test.each([
+  "/",
+  "/discover",
+  "/search",
+  "/movie/0",
+  "/tv/01",
+  "/movie/603/other",
+  "/person/603",
+  "/movie/603/recommendations/other",
+  "/movie/603\n",
+])("does not open a drawer for %j", (pathname) => {
+  expect(parseTitlePath(pathname)).toBeNull()
 })
 
 test("query edits preserve the entry origin without bypassing Next URL updates", () => {

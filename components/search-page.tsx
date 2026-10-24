@@ -25,6 +25,7 @@ import {
 } from "@/components/use-item-state"
 import { api } from "@/convex/_generated/api"
 import { useAiConfig } from "@/lib/ai"
+import { clearEntitySearch, readEntitySearch } from "@/lib/entity-search"
 import { mediaKey, type MediaItem } from "@/lib/media"
 import { replaceSearchUrl } from "@/lib/navigation"
 import {
@@ -53,10 +54,23 @@ export function SearchPageContent() {
     onActiveCardKeyChange: setActiveCardKey,
   }
   const aiConfigured = useAiConfig() !== null
-  const query = (params.get("q") ?? "").slice(0, 200)
+  const entity = readEntitySearch(params)
+  const hasEntityParams = ["entity", "id", "name", "credit"].some(
+    (key) => params.get(key) !== null
+  )
+  const invalidEntity = hasEntityParams && !entity
+  const entityLabel = entity
+    ? entity.kind === "person"
+      ? entity.credit === "crew"
+        ? "Crew credits"
+        : "Cast credits"
+      : { genre: "Genre", country: "Country", company: "Company" }[entity.kind]
+    : null
+  const query = entity ? "" : (params.get("q") ?? "").slice(0, 200)
   const typeParam = params.get("type")
   const type = typeParam === "movie" || typeParam === "tv" ? typeParam : "all"
-  const scope = params.get("scope") === "library" ? "library" : "all"
+  const scope =
+    !hasEntityParams && params.get("scope") === "library" ? "library" : "all"
   const statusParam = params.get("status")
   const status: SearchStatus =
     statusParam === "watchlist" ||
@@ -77,23 +91,38 @@ export function SearchPageContent() {
     sortParam === "title" || sortParam === "year" || sortParam === "added"
       ? sortParam
       : "relevance"
-  const describe = params.get("mode") === "describe" && aiConfigured
-  const library = searchLibrary(items ?? [], stateByKey, {
-    query,
-    type,
-    ...(scope === "library" ? { status, sentiment, collection, sort } : {}),
-  })
+  const entitySort = sortParam === "newest" ? "newest" : "popularity"
+  const describe =
+    !hasEntityParams && params.get("mode") === "describe" && aiConfigured
+  const library = hasEntityParams
+    ? []
+    : searchLibrary(items ?? [], stateByKey, {
+        query,
+        type,
+        ...(scope === "library" ? { status, sentiment, collection, sort } : {}),
+      })
   const libraryKeys = new Set(library.map(mediaKey))
-  const catalogue = results.items.filter(
-    (item) => !libraryKeys.has(mediaKey(item))
-  )
+  const catalogue = entity
+    ? results.items
+    : results.items.filter((item) => !libraryKeys.has(mediaKey(item)))
   const hasFilters =
+    !!entity ||
     type !== "all" ||
     (scope === "library" &&
       (status !== "all" ||
         sentiment !== "all" ||
         collection !== "all" ||
         sort !== "relevance"))
+
+  const removeEntity = () => {
+    const next = new URLSearchParams(params.toString())
+    clearEntitySearch(next)
+    if (sortParam === "newest" || sortParam === "popularity")
+      next.delete("sort")
+    next.delete("mode")
+    replaceSearchUrl(next)
+    setActiveCardKey(null)
+  }
 
   const update = (values: Record<string, string | null>) => {
     const next = new URLSearchParams(params.toString())
@@ -143,8 +172,21 @@ export function SearchPageContent() {
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
-        {aiConfigured && !describe && (
+        <h1 className="min-w-0 text-2xl font-semibold tracking-tight break-words">
+          {entity ? entity.name : "Search"}
+        </h1>
+        {entity && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={removeEntity}
+            aria-label={`Remove ${entityLabel} filter for ${entity.name}`}
+          >
+            {entityLabel}
+            <HugeiconsIcon icon={Cancel01Icon} />
+          </Button>
+        )}
+        {aiConfigured && !describe && !hasEntityParams && (
           <Button
             variant="outline"
             onClick={() => update({ mode: "describe" })}
@@ -154,7 +196,18 @@ export function SearchPageContent() {
           </Button>
         )}
       </div>
-      {describe ? (
+      {invalidEntity ? (
+        <div role="alert" className="flex flex-col items-start gap-3 py-6">
+          <p>This search filter is invalid or incomplete.</p>
+          <p className="text-sm text-muted-foreground">
+            Clear it to search titles again. Genre filters require a movie or TV
+            type in the link.
+          </p>
+          <Button variant="outline" onClick={removeEntity}>
+            Clear invalid filter
+          </Button>
+        </div>
+      ) : describe ? (
         <AiDescribe
           gridState={gridState}
           onExit={() => update({ mode: null })}
@@ -162,41 +215,74 @@ export function SearchPageContent() {
       ) : (
         <>
           <div className="mt-4 flex flex-wrap items-center gap-4">
-            <div
-              role="group"
-              aria-label="Search scope"
-              className="flex gap-1.5"
-            >
+            {!entity && (
+              <div
+                role="group"
+                aria-label="Search scope"
+                className="flex gap-1.5"
+              >
+                <Button
+                  size="sm"
+                  variant={scope === "all" ? "default" : "secondary"}
+                  aria-pressed={scope === "all"}
+                  onClick={() =>
+                    update({
+                      scope: null,
+                      status: null,
+                      sentiment: null,
+                      collection: null,
+                      sort: null,
+                    })
+                  }
+                >
+                  All titles
+                </Button>
+                <Button
+                  size="sm"
+                  variant={scope === "library" ? "default" : "secondary"}
+                  aria-pressed={scope === "library"}
+                  onClick={() => update({ scope: "library" })}
+                >
+                  My library
+                </Button>
+              </div>
+            )}
+            {entity?.kind === "genre" ? (
               <Button
                 size="sm"
-                variant={scope === "all" ? "default" : "secondary"}
-                aria-pressed={scope === "all"}
-                onClick={() =>
-                  update({
-                    scope: null,
-                    status: null,
-                    sentiment: null,
-                    collection: null,
-                    sort: null,
-                  })
-                }
+                variant="secondary"
+                disabled
+                aria-describedby="genre-type-help"
               >
-                All titles
+                {type === "movie" ? "Movies" : "TV"}
               </Button>
-              <Button
-                size="sm"
-                variant={scope === "library" ? "default" : "secondary"}
-                aria-pressed={scope === "library"}
-                onClick={() => update({ scope: "library" })}
-              >
-                My library
-              </Button>
-            </div>
-            <MediaTypeToggle
-              value={type}
-              onChange={(value) => update({ type: value })}
-            />
+            ) : (
+              <MediaTypeToggle
+                value={type}
+                onChange={(value) => update({ type: value })}
+              />
+            )}
+            {entity && (
+              <SearchFilter
+                label="Sort catalogue results"
+                value={entitySort}
+                onChange={(value) => update({ sort: value })}
+                options={[
+                  { value: "popularity", label: "Popularity" },
+                  { value: "newest", label: "Newest" },
+                ]}
+              />
+            )}
           </div>
+          {entity?.kind === "genre" && (
+            <p
+              id="genre-type-help"
+              className="mt-3 text-sm text-muted-foreground"
+            >
+              Genres are specific to movies or TV. Remove the genre filter to
+              change the media type.
+            </p>
+          )}
           {scope === "library" && (
             <div className="mt-4 flex flex-wrap gap-2">
               <SearchFilter
@@ -256,24 +342,28 @@ export function SearchPageContent() {
           )}
           <div className="my-6 flex flex-wrap items-center justify-between gap-2">
             <p role="status" className="text-sm text-muted-foreground">
-              {scope === "all"
-                ? "Catalogue results are ordered by best match. Saved titles appear first."
-                : items === undefined
-                  ? "Loading your library…"
-                  : `${library.length} ${library.length === 1 ? "title" : "titles"} in your library${query.trim() ? ` matching “${query.trim()}”` : ""}.`}
+              {entity
+                ? `Catalogue results are ordered by ${entitySort === "newest" ? "newest release" : "popularity"}. Saved titles are included.`
+                : scope === "all"
+                  ? "Catalogue results are ordered by best match. Saved titles appear first."
+                  : items === undefined
+                    ? "Loading your library…"
+                    : `${library.length} ${library.length === 1 ? "title" : "titles"} in your library${query.trim() ? ` matching “${query.trim()}”` : ""}.`}
             </p>
             {hasFilters && (
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() =>
-                  update({
-                    type: null,
-                    status: null,
-                    sentiment: null,
-                    collection: null,
-                    sort: null,
-                  })
+                  entity
+                    ? removeEntity()
+                    : update({
+                        type: null,
+                        status: null,
+                        sentiment: null,
+                        collection: null,
+                        sort: null,
+                      })
                 }
               >
                 Reset filters
@@ -291,7 +381,7 @@ export function SearchPageContent() {
                 titles.
               </p>
             )
-          ) : !query.trim() ? (
+          ) : !entity && !query.trim() ? (
             <div className="space-y-6 py-8">
               <p className="text-center text-muted-foreground">
                 Use the search field in the navbar to find a title, or select My
@@ -363,7 +453,11 @@ export function SearchPageContent() {
                     role="alert"
                     className="flex flex-col items-center gap-3 py-10"
                   >
-                    <p>Couldn’t search the catalogue.</p>
+                    <p>
+                      {entity
+                        ? "Couldn’t load titles for this filter."
+                        : "Couldn’t search the catalogue."}
+                    </p>
                     <Button variant="outline" onClick={results.retry}>
                       Retry search
                     </Button>
@@ -374,9 +468,15 @@ export function SearchPageContent() {
                       grid(catalogue)
                     ) : (
                       <p className="py-8 text-center text-muted-foreground">
-                        {library.length
-                          ? "Matching titles on this page are already shown in your library."
-                          : "No matching titles on this page. Try another title or media type."}
+                        {entity
+                          ? results.hasMore
+                            ? "No matching titles on this page. Try loading more results."
+                            : entity.kind === "genre"
+                              ? "No titles found for this genre. Remove the filter to search by title."
+                              : "No titles found for this filter and media type. Try another type or remove the filter."
+                          : library.length
+                            ? "Matching titles on this page are already shown in your library."
+                            : "No matching titles on this page. Try another title or media type."}
                       </p>
                     )}
                     {results.moreError && (

@@ -1,8 +1,9 @@
 "use client"
 
 import { useAction } from "convex/react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "@/convex/_generated/api"
+import type { EntitySearch } from "@/lib/entity-search"
 import type { MediaItem } from "@/lib/media"
 import { uniqueMedia, type SearchType } from "@/lib/search"
 
@@ -17,11 +18,42 @@ type Result = {
 export function useTitleSearch(
   query: string,
   type: SearchType,
-  enabled: boolean
+  enabled: boolean,
+  entity?: EntitySearch | null,
+  entitySort: "popularity" | "newest" = "popularity"
 ) {
   const search = useAction(api.tmdb.search)
-  const trimmed = query.trim().slice(0, 200)
-  const key = JSON.stringify([trimmed, type])
+  const searchEntity = useAction(api.tmdb.entitySearch)
+  const kind = entity?.kind
+  const entityId = entity?.id
+  const credit = kind === "person" ? (entity?.credit ?? "cast") : undefined
+  const trimmed = entity ? "" : query.trim().slice(0, 200)
+  const key = JSON.stringify(
+    kind
+      ? ["entity", kind, entityId, credit, type, entitySort]
+      : [trimmed, type]
+  )
+  const active =
+    enabled && (!!kind || !!trimmed) && !(kind === "genre" && type === "all")
+  const delay = kind ? 0 : 350
+  const fetchPage = useCallback(
+    (page?: number) =>
+      kind && entityId
+        ? searchEntity({
+            kind,
+            id: entityId,
+            mediaType: type,
+            ...(credit ? { credit } : {}),
+            sort: entitySort,
+            page,
+          })
+        : search({
+            query: trimmed,
+            mediaType: type === "all" ? undefined : type,
+            page,
+          }),
+    [kind, entityId, type, credit, entitySort, trimmed, search, searchEntity]
+  )
   const [result, setResult] = useState<Result | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [moreFailure, setMoreFailure] = useState<string | null>(null)
@@ -32,36 +64,26 @@ export function useTitleSearch(
 
   useEffect(() => {
     const id = ++request.current
-    if (
-      !enabled ||
-      !trimmed ||
-      (result?.key === key && result.attempt === attempt)
-    )
-      return
+    if (!active || (result?.key === key && result.attempt === attempt)) return
     const timer = setTimeout(async () => {
       setFailure(null)
       try {
-        const data = await search({
-          query: trimmed,
-          mediaType: type === "all" ? undefined : type,
-        })
+        const data = await fetchPage()
         if (request.current === id) {
           setResult({ key, ...data, page: 1, attempt })
         }
       } catch {
         if (request.current === id) setFailure(key)
       }
-    }, 350)
+    }, delay)
     return () => {
       clearTimeout(timer)
       request.current = id + 1
     }
-  }, [trimmed, type, key, enabled, search, attempt, result])
+  }, [active, key, delay, fetchPage, attempt, result])
 
   const current =
-    enabled && trimmed && result?.key === key && result.attempt === attempt
-      ? result
-      : null
+    active && result?.key === key && result.attempt === attempt ? result : null
   const loadMore = async () => {
     if (!current?.hasMore || inFlight.current === request.current) return
     const id = request.current
@@ -69,11 +91,7 @@ export function useTitleSearch(
     setMoreKey(key)
     setMoreFailure(null)
     try {
-      const data = await search({
-        query: trimmed,
-        mediaType: type === "all" ? undefined : type,
-        page: current.page + 1,
-      })
+      const data = await fetchPage(current.page + 1)
       if (request.current === id) {
         setResult({
           key,
@@ -95,7 +113,7 @@ export function useTitleSearch(
 
   return {
     items: current?.items ?? [],
-    loading: enabled && !!trimmed && current === null && failure !== key,
+    loading: active && current === null && failure !== key,
     error: failure === key,
     hasMore: current?.hasMore ?? false,
     loadingMore: moreKey === key,

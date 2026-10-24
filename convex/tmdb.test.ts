@@ -404,18 +404,18 @@ test.each([false, true])(
   }
 )
 
-test("a metadata 404 returns null without requesting artwork or caching", async () => {
+test("a metadata 404 returns null without caching despite concurrent artwork", async () => {
   const t = setup()
   fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }))
   expect(await t.action(api.tmdb.title, titleArgs)).toBeNull()
-  expect(fetchMock).toHaveBeenCalledTimes(1)
+  expect(fetchMock).toHaveBeenCalledTimes(2)
   expect((await titleCache(t)).every((entry) => entry.payload === null)).toBe(
     true
   )
 })
 
 test.each(["movie", "tv"] as const)(
-  "adult %s titles return null without requesting artwork",
+  "adult %s titles return null without caching concurrent artwork",
   async (mediaType) => {
     const t = setup()
     fetchMock.mockResolvedValueOnce(
@@ -427,7 +427,7 @@ test.each(["movie", "tv"] as const)(
       })
     )
     expect(await t.action(api.tmdb.title, { mediaType, tmdbId: 22 })).toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
     const cached = await t.query(internal.tmdb_cache.getBatch, {
       keys: [`title:${mediaType}:22:v1`, `details:${mediaType}:22:v2`],
     })
@@ -443,7 +443,7 @@ test.each([401, 429, 500, 503])(
     await expect(t.action(api.tmdb.title, titleArgs)).rejects.toThrow(
       `status ${status}`
     )
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
     expect((await titleCache(t)).every((entry) => entry.payload === null)).toBe(
       true
     )
@@ -483,7 +483,7 @@ test.each([
   await expect(t.action(api.tmdb.title, titleArgs)).rejects.toThrow(
     "Invalid TMDB title response"
   )
-  expect(fetchMock).toHaveBeenCalledTimes(1)
+  expect(fetchMock).toHaveBeenCalledTimes(2)
   expect((await titleCache(t)).every((entry) => entry.payload === null)).toBe(
     true
   )
@@ -547,3 +547,51 @@ test("existing details still rejects artwork failures and does not cache partial
   await expect(t.action(api.tmdb.details, titleArgs)).rejects.toThrow("503")
   expect((await titleCache(t))[1].payload).toBeNull()
 })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+test("cold title starts metadata and artwork together, not one network delay after another", async () => {
+  const metadata = deferred<Response>()
+  const artwork = deferred<Response>()
+  const imagesStarted = deferred<void>()
+  fetchMock.mockImplementationOnce(() => metadata.promise)
+  fetchMock.mockImplementationOnce(() => {
+    imagesStarted.resolve()
+    return artwork.promise
+  })
+  let finished = false
+  const result = setup()
+    .action(api.tmdb.title, titleArgs)
+    .then((value) => {
+      finished = true
+      return value
+    })
+  // Reaching this barrier while metadata is unresolved proves the network
+  // delays overlap. A serial implementation times out here.
+  await imagesStarted.promise
+  expect(fetchMock).toHaveBeenCalledTimes(2)
+  expect(finished).toBe(false)
+  artwork.resolve(jsonResponse(titleImages))
+  expect(finished).toBe(false)
+  metadata.resolve(jsonResponse(movieData))
+  expect(await result).toEqual(moviePayload)
+})
+
+test.each([404, 503])(
+  "metadata HTTP %s settles before pending artwork",
+  async (status) => {
+    const artwork = deferred<Response>()
+    fetchMock.mockResolvedValueOnce(new Response(null, { status }))
+    fetchMock.mockImplementationOnce(() => artwork.promise)
+    const result = setup().action(api.tmdb.title, titleArgs)
+    if (status === 404) await expect(result).resolves.toBeNull()
+    else await expect(result).rejects.toThrow("503")
+    artwork.resolve(jsonResponse(titleImages))
+  }
+)
