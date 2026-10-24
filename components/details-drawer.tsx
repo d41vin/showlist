@@ -1,17 +1,8 @@
 "use client"
 
-import {
-  useSyncExternalStore,
-  type ComponentProps,
-  type ReactNode,
-} from "react"
+import type { ComponentProps, ReactNode } from "react"
 import { TitleDetailsOpenContext } from "@/components/title-details"
 import { Drawer, DrawerContent } from "@/components/ui/drawer"
-
-function subscribeResize(onChange: () => void) {
-  window.addEventListener("resize", onChange)
-  return () => window.removeEventListener("resize", onChange)
-}
 
 export function DetailsDrawer({
   children,
@@ -26,12 +17,6 @@ export function DetailsDrawer({
   onOpenChangeComplete?: (open: boolean) => void
   finalFocus?: ComponentProps<typeof DrawerContent>["finalFocus"]
 }) {
-  const viewportWidth = useSyncExternalStore(
-    subscribeResize,
-    () => window.innerWidth,
-    () => null
-  )
-
   return (
     <Drawer
       open={open}
@@ -40,13 +25,12 @@ export function DetailsDrawer({
       showSwipeHandle
     >
       <DrawerContent
-        className="h-[calc(100dvh-6rem)] [&>[data-slot=drawer-swipe-handle]]:absolute [&>[data-slot=drawer-swipe-handle]]:top-0 [&>[data-slot=drawer-swipe-handle]]:h-5"
-        // Viewport units exclude Base UI's reserved scrollbar gutter on desktop.
-        style={
-          viewportWidth === null
-            ? undefined
-            : { width: `calc(${viewportWidth}px - 1rem)` }
-        }
+        className="[&>[data-slot=drawer-swipe-handle]]:absolute [&>[data-slot=drawer-swipe-handle]]:top-0 [&>[data-slot=drawer-swipe-handle]]:h-5"
+        // Fill the window height minus the 8px inset on both ends.
+        style={{
+          height: "calc(100dvh - 1rem)",
+          maxHeight: "calc(100dvh - 1rem)",
+        }}
         finalFocus={finalFocus}
       >
         <TitleDetailsOpenContext value={open}>
