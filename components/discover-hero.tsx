@@ -4,7 +4,7 @@ import { useAction } from "convex/react"
 import Image from "next/image"
 import { useEffect, useState } from "react"
 
-import { DetailsDrawer } from "@/components/details-drawer"
+import { MediaLink } from "@/components/media-link"
 import { ItemActions } from "@/components/item-actions"
 import type { CardGridState } from "@/components/use-item-state"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -64,91 +64,77 @@ export function DiscoverHero({
   }
 
   return (
-    <DetailsDrawer
-      item={item}
-      state={gridState.stateByKey.get(`${item.mediaType}:${item.tmdbId}`)}
-      stateByKey={gridState.stateByKey}
-      collections={gridState.collections}
-      trigger={(onOpen) => (
-        <section
-          role="button"
-          tabIndex={0}
-          onClick={onOpen}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault()
-              onOpen()
-            }
-          }}
-          className="relative aspect-video max-h-[420px] w-full cursor-pointer overflow-hidden rounded-xl bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring sm:aspect-[21/9]"
-        >
-          {data === null ? (
-            <Skeleton className="absolute inset-0 rounded-none" />
-          ) : data.backdropPath !== null ? (
-            <Image
-              src={tmdbBackdropUrl(data.backdropPath, "w1280")}
-              alt=""
-              fill
-              sizes="(max-width: 1152px) 100vw, 1152px"
-              className="object-cover"
-              priority={priority}
-            />
-          ) : null}
-          {/* Readability gradient — stronger at the bottom where content sits. */}
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"
-          />
+    <section className="relative aspect-video max-h-[420px] w-full overflow-hidden rounded-xl bg-muted sm:aspect-[21/9]">
+      <MediaLink
+        item={item}
+        aria-label={`Details for ${item.title}`}
+        className="absolute inset-0 z-10 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      />
+      {data === null ? (
+        <Skeleton className="absolute inset-0 rounded-none" />
+      ) : data.backdropPath !== null ? (
+        <Image
+          src={tmdbBackdropUrl(data.backdropPath, "w1280")}
+          alt=""
+          fill
+          sizes="(max-width: 1152px) 100vw, 1152px"
+          className="object-cover"
+          priority={priority}
+        />
+      ) : null}
+      {/* Readability gradient — stronger at the bottom where content sits. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"
+      />
 
-          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 p-5 sm:p-6">
-            {data !== null ? (
-              <>
-                {data.logoPath ? (
-                  <Image
-                    src={tmdbLogoUrl(data.logoPath)}
-                    alt={item.title}
-                    width={280}
-                    height={104}
-                    sizes="280px"
-                    className="max-h-14 w-auto max-w-[60%] self-start object-contain drop-shadow-lg sm:max-h-16"
-                    priority={priority}
-                  />
-                ) : (
-                  <h2 className="max-w-[80%] text-2xl font-bold tracking-tight text-white drop-shadow-lg sm:text-3xl">
-                    {item.title}
-                  </h2>
-                )}
-                <HeroFacts data={data} item={item} />
-                {data.overview !== null && data.overview !== "" && (
-                  <p className="line-clamp-2 max-w-2xl text-sm leading-relaxed text-white/85">
-                    {data.overview}
-                  </p>
-                )}
-                <div
-                  className="mt-1 flex flex-wrap items-center gap-1.5"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ItemActions
-                    item={item}
-                    state={gridState.stateByKey.get(
-                      `${item.mediaType}:${item.tmdbId}`
-                    )}
-                    collections={gridState.collections}
-                    layout="row"
-                  />
-                </div>
-              </>
+      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 p-5 sm:p-6">
+        {data !== null ? (
+          <>
+            {data.logoPath ? (
+              <Image
+                src={tmdbLogoUrl(data.logoPath)}
+                alt={item.title}
+                width={280}
+                height={104}
+                sizes="280px"
+                className="max-h-14 w-auto max-w-[60%] self-start object-contain drop-shadow-lg sm:max-h-16"
+                priority={priority}
+              />
             ) : (
-              <>
-                <Skeleton className="h-10 w-56 bg-white/20" />
-                <Skeleton className="h-4 w-64 bg-white/20" />
-                <Skeleton className="h-8 w-full max-w-md bg-white/20" />
-              </>
+              <h2 className="max-w-[80%] text-2xl font-bold tracking-tight text-white drop-shadow-lg sm:text-3xl">
+                {item.title}
+              </h2>
             )}
-          </div>
-        </section>
-      )}
-    />
+            <HeroFacts data={data} item={item} />
+            {data.overview !== null && data.overview !== "" && (
+              <p className="line-clamp-2 max-w-2xl text-sm leading-relaxed text-white/85">
+                {data.overview}
+              </p>
+            )}
+            <div
+              className="relative z-20 mt-1 flex w-fit flex-wrap items-center gap-1.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ItemActions
+                item={item}
+                state={gridState.stateByKey.get(
+                  `${item.mediaType}:${item.tmdbId}`
+                )}
+                collections={gridState.collections}
+                layout="row"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <Skeleton className="h-10 w-56 bg-white/20" />
+            <Skeleton className="h-4 w-64 bg-white/20" />
+            <Skeleton className="h-8 w-full max-w-md bg-white/20" />
+          </>
+        )}
+      </div>
+    </section>
   )
 }
 

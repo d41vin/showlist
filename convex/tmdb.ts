@@ -127,13 +127,26 @@ const detailsValidator = v.object({
   lastEpisode: v.union(episodeRefValidator, v.null()),
 })
 
+const titleValidator = v.object({
+  item: searchResultValidator,
+  details: detailsValidator,
+})
+
 type DetailsPayload = Infer<typeof detailsValidator>
+type TitlePayload = Infer<typeof titleValidator>
 type SeasonEpisodesPayload = Infer<typeof seasonEpisodesValidator>
 type SearchResultPayload = Infer<typeof searchResultValidator>
 type WatchProviderPayload = Infer<typeof watchProviderValidator>
 // Shape of one entry from tmdb_cache.getBatch; the annotation breaks the
 // TS circularity that runQuery results would otherwise create here.
 type CacheEntry = { payload: unknown; fetchedAt: number }
+
+class TmdbHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`TMDB request failed with status ${status}`)
+    this.name = "TmdbHttpError"
+  }
+}
 
 // Supports both TMDB v4 read access tokens (JWT) and v3 API keys.
 // Exported for schedule.ts, which re-reads the same cache entries and must
@@ -155,7 +168,7 @@ export async function tmdbFetch(path: string, params: Record<string, string>) {
   }
   const response = await fetch(url, { headers })
   if (!response.ok) {
-    throw new Error(`TMDB request failed with status ${response.status}`)
+    throw new TmdbHttpError(response.status)
   }
   return (await response.json()) as Record<string, unknown>
 }
@@ -326,6 +339,111 @@ export const search = action({
         ? Math.min(data.total_pages, 500)
         : page
     return { items, hasMore: page < totalPages }
+  },
+})
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+// Title snapshots must not change the shared details cache shape.
+export const title = action({
+  args: { mediaType: mediaTypeValidator, tmdbId: v.number() },
+  returns: v.union(titleValidator, v.null()),
+  handler: async (ctx, args): Promise<TitlePayload | null> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error("Not signed in")
+    }
+    if (!Number.isSafeInteger(args.tmdbId) || args.tmdbId <= 0) {
+      throw new Error("Invalid TMDB ID")
+    }
+    const cacheKey = `title:${args.mediaType}:${args.tmdbId}:v1`
+    const [cached] = (await ctx.runQuery(internal.tmdb_cache.getBatch, {
+      keys: [cacheKey],
+    })) as CacheEntry[]
+    if (
+      cached?.payload != null &&
+      Date.now() - cached.fetchedAt < DETAILS_TTL_MS
+    ) {
+      return cached.payload as TitlePayload
+    }
+
+    let data: Record<string, unknown>
+    try {
+      data = await tmdbFetch(`/${args.mediaType}/${args.tmdbId}`, {
+        language: "en-US",
+      })
+    } catch (error) {
+      if (error instanceof TmdbHttpError && error.status === 404) return null
+      throw error
+    }
+    if (
+      !isRecord(data) ||
+      data.id !== args.tmdbId ||
+      (data.media_type !== undefined && data.media_type !== args.mediaType) ||
+      (data.adult !== undefined && typeof data.adult !== "boolean")
+    ) {
+      throw new Error("Invalid TMDB title response")
+    }
+    if (data.adult === true) return null
+    const name = args.mediaType === "movie" ? data.title : data.name
+    if (
+      typeof name !== "string" ||
+      name.trim() === "" ||
+      // normalizeDetails expects object entries in these optional arrays.
+      ![data.genres, data.seasons].every(
+        (rows) => rows == null || (Array.isArray(rows) && rows.every(isRecord))
+      )
+    ) {
+      throw new Error("Invalid TMDB title response")
+    }
+
+    const imagesData = await tmdbFetch(
+      `/${args.mediaType}/${args.tmdbId}/images`,
+      { include_image_language: "en,null" }
+    ).catch(() => null)
+    const imagesComplete =
+      isRecord(imagesData) &&
+      Array.isArray(imagesData.logos) &&
+      imagesData.logos.every(
+        (logo) =>
+          isRecord(logo) &&
+          typeof logo.file_path === "string" &&
+          logo.file_path !== ""
+      )
+    const payload: TitlePayload = {
+      item: {
+        tmdbId: args.tmdbId,
+        mediaType: args.mediaType,
+        title: name,
+        posterPath:
+          typeof data.poster_path === "string" ? data.poster_path : null,
+        year: yearOf(
+          args.mediaType === "movie" ? data.release_date : data.first_air_date
+        ),
+      },
+      details: normalizeDetails(
+        data,
+        imagesComplete ? imagesData : {},
+        args.mediaType
+      ),
+    }
+    // Partial artwork responses must not replace complete cache entries.
+    if (imagesComplete) {
+      const fetchedAt = Date.now()
+      await ctx.runMutation(internal.tmdb_cache.putBatch, {
+        entries: [
+          { key: cacheKey, payload, fetchedAt },
+          {
+            key: `details:${args.mediaType}:${args.tmdbId}:v2`,
+            payload: payload.details,
+            fetchedAt,
+          },
+        ],
+      })
+    }
+    return payload
   },
 })
 

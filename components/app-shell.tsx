@@ -12,7 +12,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useConvexAuth, useQuery } from "convex/react"
 import Image from "next/image"
-import { useSearchParams } from "next/navigation"
+import { useBrowseSearchParams } from "@/components/navigation-state"
 import { useMemo, useState } from "react"
 
 import {
@@ -84,7 +84,7 @@ export function AppShell() {
     isAuthenticated ? {} : "skip"
   )
   const stateByKey = useItemStateMap(isAuthenticated)
-  const searchParams = useSearchParams()
+  const searchParams = useBrowseSearchParams()
   const tab =
     LIBRARY_TABS.find((value) => value === searchParams.get("tab")) ??
     "watchlist"
@@ -451,7 +451,6 @@ function CardGrid({
             key={key}
             item={item}
             state={stateByKey.get(key)}
-            stateByKey={stateByKey}
             collections={collections}
             overlayOpen={activeCardKey === key}
             onOverlayOpenChange={(open) =>

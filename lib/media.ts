@@ -99,3 +99,7 @@ export type ItemState = {
 export function mediaKey(item: Pick<MediaItem, "mediaType" | "tmdbId">) {
   return `${item.mediaType}:${item.tmdbId}`
 }
+
+export function mediaHref(item: Pick<MediaItem, "mediaType" | "tmdbId">) {
+  return `/${item.mediaType}/${item.tmdbId}`
+}

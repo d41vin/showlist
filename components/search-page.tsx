@@ -2,15 +2,14 @@
 
 import { useConvexAuth, useQuery } from "convex/react"
 import { useSearchParams } from "next/navigation"
-import { useRef, useState } from "react"
-import { AiMagicIcon, Search01Icon } from "@hugeicons/core-free-icons"
+import { useState } from "react"
+import { AiMagicIcon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { AiDescribe } from "@/components/ai-describe"
-import { DetailsDrawer } from "@/components/details-drawer"
+import { useNavigationState } from "@/components/navigation-state"
 import { MediaTypeToggle } from "@/components/media-type-toggle"
 import { ShowCard } from "@/components/show-card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -24,10 +23,10 @@ import {
   useItemStateMap,
   type CardGridState,
 } from "@/components/use-item-state"
-import { useTitleSearch } from "@/components/use-title-search"
 import { api } from "@/convex/_generated/api"
 import { useAiConfig } from "@/lib/ai"
 import { mediaKey, type MediaItem } from "@/lib/media"
+import { replaceSearchUrl } from "@/lib/navigation"
 import {
   savedLabels,
   searchLibrary,
@@ -46,9 +45,7 @@ export function SearchPageContent() {
   const stateByKey = useItemStateMap(isAuthenticated)
   const collections = useCollectionSummaries(isAuthenticated)
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null)
-  const [selected, setSelected] = useState<MediaItem | null>(null)
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const { results, recent, removeRecent, rememberSearch } = useNavigationState()
   const gridState: CardGridState = {
     stateByKey,
     collections,
@@ -81,11 +78,6 @@ export function SearchPageContent() {
       ? sortParam
       : "relevance"
   const describe = params.get("mode") === "describe" && aiConfigured
-  const results = useTitleSearch(
-    query,
-    type,
-    isAuthenticated && scope === "all" && !describe
-  )
   const library = searchLibrary(items ?? [], stateByKey, {
     query,
     type,
@@ -110,11 +102,7 @@ export function SearchPageContent() {
         next.delete(key)
       else next.set(key, value)
     }
-    window.history.replaceState(
-      null,
-      "",
-      `/search${next.size ? `?${next}` : ""}`
-    )
+    replaceSearchUrl(next)
     setActiveCardKey(null)
   }
 
@@ -126,13 +114,8 @@ export function SearchPageContent() {
         return (
           <div key={key} className="min-w-0" data-search-key={key}>
             <ShowCard
-              onOpenDetails={() => {
-                setSelected(item)
-                setDetailsOpen(true)
-              }}
               item={item}
               state={state}
-              stateByKey={stateByKey}
               collections={collections}
               overlayOpen={activeCardKey === key}
               onOverlayOpenChange={(open) =>
@@ -159,26 +142,6 @@ export function SearchPageContent() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
-      {selected && (
-        <DetailsDrawer
-          key={mediaKey(selected)}
-          item={selected}
-          state={stateByKey.get(mediaKey(selected))}
-          stateByKey={stateByKey}
-          collections={collections}
-          open={detailsOpen}
-          trigger={() => null}
-          onOpenChange={setDetailsOpen}
-          onOpenChangeComplete={(open) => {
-            if (!open) setSelected(null)
-          }}
-          finalFocus={() =>
-            document.querySelector<HTMLButtonElement>(
-              `[data-search-key="${mediaKey(selected)}"] [data-search-title]`
-            ) ?? inputRef.current
-          }
-        />
-      )}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
         {aiConfigured && !describe && (
@@ -198,22 +161,6 @@ export function SearchPageContent() {
         />
       ) : (
         <>
-          <div className="relative max-w-2xl">
-            <HugeiconsIcon
-              icon={Search01Icon}
-              className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              ref={inputRef}
-              type="search"
-              className="pl-9"
-              value={query}
-              maxLength={200}
-              onChange={(event) => update({ q: event.target.value })}
-              aria-label="Search movies, TV and your library"
-              placeholder="Search movies, TV and your library…"
-            />
-          </div>
           <div className="mt-4 flex flex-wrap items-center gap-4">
             <div
               role="group"
@@ -345,10 +292,47 @@ export function SearchPageContent() {
               </p>
             )
           ) : !query.trim() ? (
-            <p className="py-12 text-center text-muted-foreground">
-              Enter a title to search the catalogue, or select My library to
-              browse your saved titles.
-            </p>
+            <div className="space-y-6 py-8">
+              <p className="text-center text-muted-foreground">
+                Use the search field in the navbar to find a title, or select My
+                library to browse your saved titles.
+              </p>
+              {recent.length > 0 && (
+                <section
+                  className="mx-auto max-w-xl space-y-2"
+                  aria-label="Recent searches"
+                >
+                  <h2 className="text-sm font-medium">
+                    Recent searches{" "}
+                    <span className="text-muted-foreground">
+                      · on this device
+                    </span>
+                  </h2>
+                  {recent.map((value) => (
+                    <div key={value} className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        className="min-w-0 flex-1 justify-start truncate"
+                        onClick={() => {
+                          rememberSearch(value)
+                          update({ q: value })
+                        }}
+                      >
+                        {value}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Remove recent search ${value}`}
+                        onClick={() => removeRecent(value)}
+                      >
+                        <HugeiconsIcon icon={Cancel01Icon} />
+                      </Button>
+                    </div>
+                  ))}
+                </section>
+              )}
+            </div>
           ) : (
             <div className="space-y-8">
               {library.length > 0 && (

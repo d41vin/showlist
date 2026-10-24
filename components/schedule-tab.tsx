@@ -4,6 +4,7 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   ImageNotFound01Icon,
+  MoreHorizontalIcon,
   RefreshIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -12,7 +13,7 @@ import type { FunctionReturnType } from "convex/server"
 import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 
-import { DetailsDrawer } from "@/components/details-drawer"
+import { MediaLink } from "@/components/media-link"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -21,14 +22,8 @@ import {
   localTodayISO,
   localWeekRange,
   tmdbPosterThumbUrl,
-  type CollectionSummary,
-  type ItemState,
   type MediaItem,
 } from "@/lib/media"
-import {
-  useCollectionSummaries,
-  useItemStateMap,
-} from "@/components/use-item-state"
 
 type ScheduleResult = FunctionReturnType<typeof api.schedule.get>
 type ScheduleEntry = ScheduleResult["entries"][number]
@@ -75,8 +70,6 @@ export function ScheduleTab({
   const toggleEpisode = useMutation(api.episodes.toggle)
   // Real per-title state for the row drawers (subscriptions are deduped with
   // the other tabs' queries, so this costs nothing).
-  const stateByKey = useItemStateMap(isAuthenticated)
-  const collections = useCollectionSummaries(isAuthenticated)
 
   // 0 = the week containing today; negative = past weeks. Weeks are
   // Monday-start and computed against the user's local calendar.
@@ -244,16 +237,7 @@ export function ScheduleTab({
           <div key={group.label} className="flex flex-col gap-1">
             <h3 className="text-sm font-semibold">{group.label}</h3>
             {group.rows.map((row) => (
-              <ScheduleRow
-                key={row.key}
-                row={row}
-                onToggle={onToggle}
-                state={stateByKey.get(
-                  `${row.item.mediaType}:${row.item.tmdbId}`
-                )}
-                stateByKey={stateByKey}
-                collections={collections}
-              />
+              <ScheduleRow key={row.key} row={row} onToggle={onToggle} />
             ))}
           </div>
         ))
@@ -319,15 +303,9 @@ function weekRangeLabel(from: string, to: string, today: string) {
 function ScheduleRow({
   row,
   onToggle,
-  state,
-  stateByKey,
-  collections,
 }: {
   row: Row
   onToggle: (row: Row) => void
-  state: ItemState | undefined
-  stateByKey: Map<string, ItemState>
-  collections: CollectionSummary[]
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg px-1 py-1.5 hover:bg-accent/50">
@@ -359,12 +337,13 @@ function ScheduleRow({
           row.watched ? "unwatched" : "watched"
         }`}
       />
-      <DetailsDrawer
+      <MediaLink
         item={row.item}
-        state={state}
-        stateByKey={stateByKey}
-        collections={collections}
-      />
+        aria-label={`Details for ${row.item.title}`}
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-full hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <HugeiconsIcon icon={MoreHorizontalIcon} className="size-4" />
+      </MediaLink>
     </div>
   )
 }

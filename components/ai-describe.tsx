@@ -5,6 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { useState } from "react"
 
 import { ShowCard } from "@/components/show-card"
+import { useRetainedState } from "@/components/navigation-state"
 import { useResolveRecommendations } from "@/components/use-ai-resolve"
 import type { CardGridState } from "@/components/use-item-state"
 import { Button } from "@/components/ui/button"
@@ -30,11 +31,11 @@ export function AiDescribe({
   const config = useAiConfig()
   const resolve = useResolveRecommendations()
 
-  const [prompt, setPrompt] = useState("")
+  const [prompt, setPrompt] = useRetainedState("describe:prompt", "")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [rows, setRows] = useState<Row[]>([])
-  const [ranOnce, setRanOnce] = useState(false)
+  const [rows, setRows] = useRetainedState<Row[]>("describe:rows", [])
+  const [ranOnce, setRanOnce] = useRetainedState("describe:ran", false)
 
   const run = async () => {
     const text = prompt.trim()
@@ -118,7 +119,6 @@ export function AiDescribe({
               <ShowCard
                 item={row.item}
                 state={gridState.stateByKey.get(row.key)}
-                stateByKey={gridState.stateByKey}
                 collections={gridState.collections}
                 overlayOpen={gridState.activeCardKey === row.key}
                 onOverlayOpenChange={(open) =>

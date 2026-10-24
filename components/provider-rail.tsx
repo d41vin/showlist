@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { ShowCard } from "@/components/show-card"
+import { useRetainedState } from "@/components/navigation-state"
 import type { CardGridState } from "@/components/use-item-state"
 import { api } from "@/convex/_generated/api"
 import { RailScroller } from "@/components/rail-scroller"
@@ -89,18 +90,26 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
   const discoverAction = useAction(api.tmdb.discover)
   const scheduleGet = useAction(api.schedule.get)
 
-  const [providers, setProviders] = useState<Providers | null>(null)
-  const [failed, setFailed] = useState(false)
-  // The user's explicit service pick; null = "first service" (derived below
-  // once the provider list loads).
-  const [picked, setPicked] = useState<number | null>(null)
-  const [railType, setRailType] = useState<"movie" | "tv">("movie")
-  const [sort, setSort] = useState<ProviderSort>("newest")
-  // Title lists keyed by `${providerId}:${railType}:${sort}`; loading is
-  // derived.
-  const [titlesByKey, setTitlesByKey] = useState<Record<string, MediaItem[]>>(
-    {}
+  const [providers, setProviders] = useRetainedState<Providers | null>(
+    "providers:list",
+    null
   )
+  const [failed, setFailed] = useState(false)
+  const [picked, setPicked] = useRetainedState<number | null>(
+    "providers:picked",
+    null
+  )
+  const [railType, setRailType] = useRetainedState<"movie" | "tv">(
+    "providers:type",
+    "movie"
+  )
+  const [sort, setSort] = useRetainedState<ProviderSort>(
+    "providers:sort",
+    "newest"
+  )
+  const [titlesByKey, setTitlesByKey] = useRetainedState<
+    Record<string, MediaItem[]>
+  >("providers:titles", {})
   const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set())
   // Airing badges for one TV rail (tmdbId → badge), keyed like titlesByKey.
   const [badgesByKey, setBadgesByKey] = useState<
@@ -123,7 +132,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
     return () => {
       cancelled = true
     }
-  }, [providersAction])
+  }, [providersAction, setProviders])
 
   // The curated services only, in display order; logos come from TMDB's
   // list unless overridden locally. A service whose only TMDB entry lives
@@ -205,6 +214,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
     titlesByKey,
     failedKeys,
     discoverAction,
+    setTitlesByKey,
   ])
 
   // Airing badges for the current TV rail — one schedule call per selection,
@@ -387,7 +397,6 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                     <ShowCard
                       item={title}
                       state={gridState.stateByKey.get(key)}
-                      stateByKey={gridState.stateByKey}
                       collections={gridState.collections}
                       overlayOpen={gridState.activeCardKey === key}
                       onOverlayOpenChange={(open) =>

@@ -2,7 +2,10 @@
 
 import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
 import { useAction, useConvexAuth } from "convex/react"
-import { useSearchParams } from "next/navigation"
+import {
+  useBrowseSearchParams,
+  useRetainedState,
+} from "@/components/navigation-state"
 import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 
 import { AiForYou } from "@/components/ai-for-you"
@@ -137,7 +140,6 @@ function DiscoverContent() {
       <ShowCard
         item={item}
         state={stateByKey.get(key)}
-        stateByKey={stateByKey}
         collections={collections}
         overlayOpen={activeCardKey === key}
         onOverlayOpenChange={(open) => setActiveCardKey(open ? key : null)}
@@ -145,7 +147,7 @@ function DiscoverContent() {
     )
   }
 
-  const searchParams = useSearchParams()
+  const searchParams = useBrowseSearchParams()
   const typeParam = searchParams.get("type")
   const mediaType: MediaTypeFilter =
     typeParam === "movie" || typeParam === "tv" ? typeParam : "all"
@@ -155,11 +157,11 @@ function DiscoverContent() {
   const requestedGenre = searchParams.get("genre") || null
   const [curatedAttempt, setCuratedAttempt] = useState(0)
   const curatedKey = `${mediaType}:${curatedAttempt}`
-  const [curatedStore, setCuratedStore] = useState<{
+  const [curatedStore, setCuratedStore] = useRetainedState<{
     key: string
     rows: RowData[]
     error: boolean
-  } | null>(null)
+  } | null>("discover:curated", null)
   const currentCurated =
     isAuthenticated && curatedStore?.key === curatedKey ? curatedStore : null
   const rows = currentCurated?.rows ?? []
@@ -170,11 +172,11 @@ function DiscoverContent() {
   // cannot flash while URL state is restored or the selected type changes.
   const [genreAttempt, setGenreAttempt] = useState(0)
   const genreKey = `${mediaType}:${genreAttempt}`
-  const [genreStore, setGenreStore] = useState<{
+  const [genreStore, setGenreStore] = useRetainedState<{
     key: string
     options: GenreOption[]
     error: boolean
-  } | null>(null)
+  } | null>("discover:genres", null)
   const currentGenres =
     isAuthenticated && genreStore?.key === genreKey ? genreStore : null
   const genreOptions = useMemo(
@@ -187,7 +189,10 @@ function DiscoverContent() {
       ? (genreOptions.find((option) => option.value === requestedGenre)
           ?.value ?? null)
       : requestedGenre
-  const [browseStore, setBrowseStore] = useState<BrowseStore | null>(null)
+  const [browseStore, setBrowseStore] = useRetainedState<BrowseStore | null>(
+    "discover:browse",
+    null
+  )
   const [browseFailed, setBrowseFailed] = useState<string | null>(null)
   const [loadingMoreRequest, setLoadingMoreRequest] = useState<{
     key: string
@@ -290,6 +295,7 @@ function DiscoverContent() {
     discoverPopular,
     discoverTopRated,
     discoverNowPlaying,
+    setCuratedStore,
   ])
 
   const browseKey =
@@ -393,7 +399,7 @@ function DiscoverContent() {
     return () => {
       cancelled = true
     }
-  }, [isAuthenticated, mediaType, genreKey, genresAction])
+  }, [isAuthenticated, mediaType, genreKey, genresAction, setGenreStore])
 
   useEffect(() => {
     if (
@@ -459,6 +465,7 @@ function DiscoverContent() {
     sortBy,
     isAuthenticated,
     discoverByFilters,
+    setBrowseStore,
   ])
 
   const loadMoreBrowse = async () => {

@@ -289,69 +289,73 @@ export function RailScroller({
             (double-left) that returns to the first slide. */}
         <HugeiconsIcon icon={atEnd ? ArrowLeftDoubleIcon : ArrowRight01Icon} />
       </button>
-      {pagination && pageCount > 1 && (
-        <div className="mt-2.5 flex items-center justify-center gap-2">
-          {/* Dots pill — media-player chrome: dark in both themes. */}
-          <div className="flex h-8 items-center gap-1.5 rounded-full bg-black/60 px-3 backdrop-blur">
-            {Array.from({ length: pageCount }, (_, i) => {
-              const active = activePage === i
-              const animating = active && autoAdvanceMs !== undefined && !paused
-              return (
+      {pagination && (
+        <div className="mt-2.5 flex min-h-8 items-center justify-center gap-2">
+          {pageCount > 1 && (
+            <>
+              <div className="flex h-8 items-center gap-1.5 rounded-full bg-black/60 px-3 backdrop-blur">
+                {Array.from({ length: pageCount }, (_, i) => {
+                  const active = activePage === i
+                  const animating =
+                    active && autoAdvanceMs !== undefined && !paused
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      aria-label={`Go to slide ${i + 1} of ${pageCount}`}
+                      aria-current={active}
+                      onClick={() => {
+                        const el = railRef.current
+                        if (el === null) return
+                        el.scrollTo({
+                          left: i * el.clientWidth,
+                          behavior: scrollBehavior,
+                        })
+                      }}
+                      className="group/dot -m-1.5 flex cursor-pointer items-center justify-center p-1.5"
+                    >
+                      <span
+                        className={cn(
+                          "relative block overflow-hidden rounded-full transition-all",
+                          active
+                            ? animating
+                              ? "h-1.5 w-8 bg-white/25"
+                              : "h-1.5 w-8 bg-white"
+                            : "size-1.5 bg-white/40 group-hover/dot:bg-white/70"
+                        )}
+                      >
+                        {animating &&
+                          autoAdvanceMs !== undefined &&
+                          scrollBehavior === "smooth" && (
+                            <span
+                              aria-hidden
+                              className="absolute inset-y-0 left-0 rounded-full bg-white group-hover/rail:[animation-play-state:paused]"
+                              style={{
+                                animation: `rail-progress ${autoAdvanceMs}ms linear forwards`,
+                              }}
+                            />
+                          )}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              {autoAdvanceMs !== undefined && scrollBehavior === "smooth" && (
                 <button
-                  key={i}
                   type="button"
-                  aria-label={`Go to slide ${i + 1} of ${pageCount}`}
-                  aria-current={active}
-                  onClick={() => {
-                    const el = railRef.current
-                    if (el === null) return
-                    el.scrollTo({
-                      left: i * el.clientWidth,
-                      behavior: scrollBehavior,
-                    })
-                  }}
-                  className="group/dot -m-1.5 flex cursor-pointer items-center justify-center p-1.5"
+                  data-autoplay-control
+                  aria-label={paused ? "Resume slideshow" : "Pause slideshow"}
+                  aria-pressed={paused}
+                  onClick={() => setPausedBoth(!paused)}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-black/75"
                 >
-                  <span
-                    className={cn(
-                      "relative block overflow-hidden rounded-full transition-all",
-                      active
-                        ? animating
-                          ? "h-1.5 w-8 bg-white/25"
-                          : "h-1.5 w-8 bg-white"
-                        : "size-1.5 bg-white/40 group-hover/dot:bg-white/70"
-                    )}
-                  >
-                    {animating &&
-                      autoAdvanceMs !== undefined &&
-                      scrollBehavior === "smooth" && (
-                        <span
-                          aria-hidden
-                          className="absolute inset-y-0 left-0 rounded-full bg-white group-hover/rail:[animation-play-state:paused]"
-                          style={{
-                            animation: `rail-progress ${autoAdvanceMs}ms linear forwards`,
-                          }}
-                        />
-                      )}
-                  </span>
+                  <HugeiconsIcon
+                    icon={paused ? PlayIcon : PauseIcon}
+                    className="size-3.5"
+                  />
                 </button>
-              )
-            })}
-          </div>
-          {autoAdvanceMs !== undefined && scrollBehavior === "smooth" && (
-            <button
-              type="button"
-              data-autoplay-control
-              aria-label={paused ? "Resume slideshow" : "Pause slideshow"}
-              aria-pressed={paused}
-              onClick={() => setPausedBoth(!paused)}
-              className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-black/75"
-            >
-              <HugeiconsIcon
-                icon={paused ? PlayIcon : PauseIcon}
-                className="size-3.5"
-              />
-            </button>
+              )}
+            </>
           )}
         </div>
       )}

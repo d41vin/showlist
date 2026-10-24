@@ -1,21 +1,14 @@
-import {
-  ClerkProvider,
-  Show,
-  SignInButton,
-  SignUpButton,
-  UserButton,
-} from "@clerk/nextjs"
+import { ClerkProvider } from "@clerk/nextjs"
 import { shadcn } from "@clerk/ui/themes"
 import type { Metadata } from "next"
 import { Geist_Mono, Inter } from "next/font/google"
+import { Suspense } from "react"
 
 import "@/styles/globals.css"
 import { AppHeader } from "@/components/app-header"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
-import { GlobalSearch } from "@/components/global-search"
-import { SettingsMenu } from "@/components/settings-menu"
+import { NavigationProvider } from "@/components/navigation-state"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
@@ -28,17 +21,11 @@ export const metadata: Metadata = {
 }
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
-
-const fontMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-})
+const fontMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
       lang="en"
@@ -54,31 +41,21 @@ export default function RootLayout({
         <ClerkProvider appearance={{ theme: shadcn }}>
           <ConvexClientProvider>
             <ThemeProvider>
-              <header className="border-b">
-                <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+              <Suspense
+                fallback={
+                  <p
+                    role="status"
+                    className="p-6 text-sm text-muted-foreground"
+                  >
+                    Loading ShowList…
+                  </p>
+                }
+              >
+                <NavigationProvider>
                   <AppHeader />
-                  <div className="flex items-center gap-2">
-                    <Show when="signed-in">
-                      <GlobalSearch />
-                    </Show>
-                    <SettingsMenu />
-                    <Show when="signed-out">
-                      <SignInButton>
-                        <Button variant="ghost" size="sm">
-                          Sign in
-                        </Button>
-                      </SignInButton>
-                      <SignUpButton>
-                        <Button size="sm">Sign up</Button>
-                      </SignUpButton>
-                    </Show>
-                    <Show when="signed-in">
-                      <UserButton />
-                    </Show>
-                  </div>
-                </div>
-              </header>
-              {children}
+                  {children}
+                </NavigationProvider>
+              </Suspense>
             </ThemeProvider>
           </ConvexClientProvider>
         </ClerkProvider>
