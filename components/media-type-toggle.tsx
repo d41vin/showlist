@@ -17,12 +17,13 @@ const options: { value: MediaTypeFilter; label: string }[] = [
 
 export function MediaTypeToggle({ value, onChange }: MediaTypeToggleProps) {
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-1.5" role="group" aria-label="Media type">
       {options.map((option) => (
         <Button
           key={option.value}
           variant={value === option.value ? "default" : "secondary"}
           size="sm"
+          aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
         >
           {option.label}

@@ -1,4 +1,5 @@
 import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
+import { Suspense } from "react"
 
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
@@ -27,7 +28,15 @@ export default function Page() {
         </main>
       </Show>
       <Show when="signed-in">
-        <AppShell />
+        <Suspense
+          fallback={
+            <p className="px-6 py-8 text-sm text-muted-foreground">
+              Loading your library...
+            </p>
+          }
+        >
+          <AppShell />
+        </Suspense>
       </Show>
     </>
   )

@@ -1,7 +1,13 @@
 import { v } from "convex/values"
 
+import type { Doc } from "./_generated/dataModel"
 import { type MutationCtx, mutation, query } from "./_generated/server"
-import { findItem, requireUserId } from "./helpers"
+import {
+  deleteIfFullyUnset,
+  findItem,
+  requireUserId,
+  type Snapshot,
+} from "./helpers"
 import { searchResultValidator } from "./tmdb"
 
 // Per-episode watched ticks (PrimeWire-style). Rows reference the show by
@@ -69,6 +75,9 @@ export const toggle = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx)
+    validateSeason(args.item, args.season)
+    validateEpisode(args.episode)
+    const doc = await findItem(ctx, userId, args.item)
     const existing = await ctx.db
       .query("episodeWatches")
       .withIndex("by_user_and_tmdbId_and_season", (q) =>
@@ -78,13 +87,17 @@ export const toggle = mutation({
           .eq("season", args.season)
       )
       .filter((row) => row.eq(row.field("episode"), args.episode))
-      .first()
-    if (existing !== null) {
-      await ctx.db.delete("episodeWatches", existing._id)
+      .take(MAX_SEASON_EPISODES + 1)
+    validateRowCount(existing.length)
+    if (existing.length > 0) {
+      for (const row of existing) {
+        await ctx.db.delete("episodeWatches", row._id)
+      }
+      if (doc !== null) await deleteIfFullyUnset(ctx, doc)
       return null
     }
 
-    await ensureWatching(ctx, userId, args.item)
+    await ensureWatching(ctx, userId, args.item, doc)
     await ctx.db.insert("episodeWatches", {
       userId,
       tmdbId: args.item.tmdbId,
@@ -110,12 +123,18 @@ export const setSeason = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx)
+    validateSeason(args.item, args.season)
     if (args.episodes.length > MAX_SEASON_EPISODES) {
       throw new Error(
         `Too many episodes at once (${args.episodes.length}); limit is ${MAX_SEASON_EPISODES}`
       )
     }
-    const userId = await requireUserId(ctx)
+    for (const episode of args.episodes) validateEpisode(episode)
+    const doc = await findItem(ctx, userId, args.item)
+    const episodes = new Set(args.episodes)
+    if (episodes.size === 0) return null
+
     const seasonRows = await ctx.db
       .query("episodeWatches")
       .withIndex("by_user_and_tmdbId_and_season", (q) =>
@@ -124,12 +143,22 @@ export const setSeason = mutation({
           .eq("tmdbId", args.item.tmdbId)
           .eq("season", args.season)
       )
-      .collect()
+      .take(MAX_SEASON_EPISODES + 1)
+    validateRowCount(seasonRows.length)
     if (args.watched) {
-      await ensureWatching(ctx, userId, args.item)
-      const marked = new Set(seasonRows.map((row) => row.episode))
+      await ensureWatching(ctx, userId, args.item, doc)
+      // Repair only this season's legacy duplicates, keeping the original
+      // watched date even if a later-created row has the older timestamp.
+      const marked = new Set<number>()
+      for (const row of seasonRows.sort((a, b) => a.watchedAt - b.watchedAt)) {
+        if (marked.has(row.episode)) {
+          await ctx.db.delete("episodeWatches", row._id)
+        } else {
+          marked.add(row.episode)
+        }
+      }
       const now = Date.now()
-      for (const episode of args.episodes) {
+      for (const episode of episodes) {
         if (marked.has(episode)) continue
         await ctx.db.insert("episodeWatches", {
           userId,
@@ -141,12 +170,12 @@ export const setSeason = mutation({
       }
       return null
     }
-    const toClear = new Set(args.episodes)
     for (const row of seasonRows) {
-      if (toClear.has(row.episode)) {
+      if (episodes.has(row.episode)) {
         await ctx.db.delete("episodeWatches", row._id)
       }
     }
+    if (doc !== null) await deleteIfFullyUnset(ctx, doc)
     return null
   },
 })
@@ -157,15 +186,9 @@ export const setSeason = mutation({
 async function ensureWatching(
   ctx: MutationCtx,
   userId: string,
-  item: {
-    tmdbId: number
-    mediaType: "movie" | "tv"
-    title: string
-    posterPath: string | null
-    year: string | null
-  }
+  item: Snapshot,
+  doc: Doc<"items"> | null
 ) {
-  const doc = await findItem(ctx, userId, item)
   const now = Date.now()
   if (doc === null) {
     await ctx.db.insert("items", {
@@ -185,5 +208,28 @@ async function ensureWatching(
       watchingAt: now,
       updatedAt: now,
     })
+  }
+}
+
+function validateSeason(item: Snapshot, season: number) {
+  if (item.mediaType !== "tv") {
+    throw new Error("Episode progress requires a TV item")
+  }
+  if (!Number.isSafeInteger(season) || season < 0) {
+    throw new Error("Season number must be a safe integer >= 0")
+  }
+}
+
+function validateEpisode(episode: number) {
+  if (!Number.isSafeInteger(episode) || episode < 1) {
+    throw new Error("Episode number must be a safe integer >= 1")
+  }
+}
+
+function validateRowCount(count: number) {
+  if (count > MAX_SEASON_EPISODES) {
+    throw new Error(
+      `Too many existing episode rows; limit is ${MAX_SEASON_EPISODES}`
+    )
   }
 }

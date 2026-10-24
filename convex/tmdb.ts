@@ -264,7 +264,11 @@ function yearOf(date: unknown): string | null {
 }
 
 export const search = action({
-  args: { query: v.string(), page: v.optional(v.number()) },
+  args: {
+    query: v.string(),
+    page: v.optional(v.number()),
+    mediaType: v.optional(mediaTypeValidator),
+  },
   returns: v.object({
     items: v.array(searchResultValidator),
     hasMore: v.boolean(),
@@ -275,36 +279,52 @@ export const search = action({
       throw new Error("Not signed in")
     }
     const query = args.query.trim()
-    if (query === "") {
-      return { items: [], hasMore: false }
-    }
     const page = args.page ?? 1
-    const data = await tmdbFetch("/search/multi", {
+    if (query.length > 200)
+      throw new Error("Search is limited to 200 characters")
+    if (!Number.isSafeInteger(page) || page < 1 || page > 500) {
+      throw new Error("Invalid search page")
+    }
+    if (query === "") return { items: [], hasMore: false }
+    const data = await tmdbFetch(`/search/${args.mediaType ?? "multi"}`, {
       query,
       include_adult: "false",
       language: "en-US",
       page: String(page),
     })
     const results = Array.isArray(data.results) ? data.results : []
-    const items = results
-      // Keep movies/tv only; also drop anything TMDB flags as adult, in case
-      // a pornographic title slips past include_adult=false via bad tagging.
-      .filter(
-        (r: Record<string, unknown>) =>
-          (r.media_type === "movie" || r.media_type === "tv") &&
-          r.adult !== true
+    const items: SearchResultPayload[] = []
+    const seen = new Set<string>()
+    for (const raw of results) {
+      if (raw === null || typeof raw !== "object") continue
+      const r = raw as Record<string, unknown>
+      const mediaType = args.mediaType ?? r.media_type
+      const title = mediaType === "movie" ? r.title : r.name
+      if (
+        (mediaType !== "movie" && mediaType !== "tv") ||
+        r.adult === true ||
+        typeof r.id !== "number" ||
+        !Number.isSafeInteger(r.id) ||
+        r.id <= 0 ||
+        typeof title !== "string" ||
+        title.trim() === ""
       )
-      .map((r: Record<string, unknown>) => ({
-        tmdbId: r.id as number,
-        mediaType: r.media_type as "movie" | "tv",
-        title: String(r.media_type === "movie" ? r.title : r.name),
+        continue
+      const key = `${mediaType}:${r.id}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push({
+        tmdbId: r.id,
+        mediaType,
+        title,
         posterPath: typeof r.poster_path === "string" ? r.poster_path : null,
-        year: yearOf(
-          r.media_type === "movie" ? r.release_date : r.first_air_date
-        ),
-      }))
+        year: yearOf(mediaType === "movie" ? r.release_date : r.first_air_date),
+      })
+    }
     const totalPages =
-      typeof data.total_pages === "number" ? data.total_pages : page
+      typeof data.total_pages === "number"
+        ? Math.min(data.total_pages, 500)
+        : page
     return { items, hasMore: page < totalPages }
   },
 })

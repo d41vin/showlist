@@ -12,6 +12,7 @@ import { Geist_Mono, Inter } from "next/font/google"
 import "@/styles/globals.css"
 import { AppHeader } from "@/components/app-header"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
+import { GlobalSearch } from "@/components/global-search"
 import { SettingsMenu } from "@/components/settings-menu"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
@@ -54,9 +55,12 @@ export default function RootLayout({
           <ConvexClientProvider>
             <ThemeProvider>
               <header className="border-b">
-                <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-6">
+                <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
                   <AppHeader />
                   <div className="flex items-center gap-2">
+                    <Show when="signed-in">
+                      <GlobalSearch />
+                    </Show>
                     <SettingsMenu />
                     <Show when="signed-out">
                       <SignInButton>

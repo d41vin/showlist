@@ -37,6 +37,7 @@ export function ShowCard({
   overlayOpen,
   onOverlayOpenChange,
   badge,
+  onOpenDetails,
 }: {
   item: MediaItem
   state: ItemState | undefined
@@ -50,6 +51,7 @@ export function ShowCard({
   onOverlayOpenChange?: (open: boolean) => void
   // Optional status chip on the poster (e.g. "New episode" on rail cards).
   badge?: string
+  onOpenDetails?: () => void
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -93,7 +95,7 @@ export function ShowCard({
         <div
           ref={rootRef}
           className="group flex cursor-pointer flex-col gap-1.5"
-          onClick={onOpen}
+          onClick={onOpenDetails ?? onOpen}
         >
           <div className="relative aspect-2/3 overflow-hidden rounded-lg bg-muted">
             {item.posterPath ? (
@@ -123,7 +125,7 @@ export function ShowCard({
                 "pointer-events-none absolute inset-0 flex flex-col justify-center gap-1.5 bg-black/70 p-3 transition-opacity",
                 overlayOpen
                   ? "opacity-100"
-                  : "opacity-0 group-hover:opacity-100"
+                  : "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
               )}
             >
               <div
@@ -141,6 +143,7 @@ export function ShowCard({
           <div className="min-w-0">
             <button
               type="button"
+              data-search-title
               className="block w-full cursor-pointer truncate text-left text-sm font-medium hover:underline"
             >
               {item.title}

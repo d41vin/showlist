@@ -11,17 +11,19 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { EpisodesSection } from "@/components/episodes-section"
 import { ItemActions } from "@/components/item-actions"
 import { Button } from "@/components/ui/button"
 import {
   Drawer,
+  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { api } from "@/convex/_generated/api"
 import {
   tmdbBackdropUrl,
@@ -44,6 +46,10 @@ export function DetailsDrawer({
   stateByKey,
   collections,
   trigger,
+  open: controlledOpen,
+  onOpenChange,
+  onOpenChangeComplete,
+  finalFocus,
 }: {
   item: MediaItem
   state: ItemState | undefined
@@ -54,16 +60,25 @@ export function DetailsDrawer({
   // Custom trigger (render prop receiving the open callback); defaults to
   // the standard kebab button.
   trigger?: (onOpen: () => void) => React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  onOpenChangeComplete?: (open: boolean) => void
+  finalFocus?: React.ComponentProps<typeof DrawerContent>["finalFocus"]
 }) {
   const details = useAction(api.tmdb.details)
   const recommendationsAction = useAction(api.tmdb.recommendations)
   const videosAction = useAction(api.tmdb.videos)
 
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
   const [current, setCurrent] = useState<MediaItem>(item)
-  const currentKey = `${current.mediaType}:${current.tmdbId}`
+  const { mediaType, tmdbId } = current
+  const currentKey = `${mediaType}:${tmdbId}`
   const originalKey = `${item.mediaType}:${item.tmdbId}`
   const drilling = currentKey !== originalKey
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const stopTrailerRef = useRef<HTMLButtonElement>(null)
 
   // Per-title fetch caches for the drawer session; loading is derived.
   const [detailsByKey, setDetailsByKey] = useState<Record<string, ShowDetails>>(
@@ -77,15 +92,45 @@ export function DetailsDrawer({
   const [trailerByKey, setTrailerByKey] = useState<
     Record<string, { key: string; name: string } | null>
   >({})
-  // Key of the title whose trailer plays in the hero. Drilling to another
-  // title or closing the drawer drops out of playback — derived from the
-  // key comparison, so no reset effect is needed.
   const [playingKey, setPlayingKey] = useState<string | null>(null)
+  const [session, setSession] = useState({ open, originalKey })
+
+  // Also reset when a controlled parent closes the drawer or changes its item.
+  // Compare identities, not item object references from reactive queries.
+  if (session.open !== open || session.originalKey !== originalKey) {
+    setSession({ open, originalKey })
+    setCurrent(item)
+    setPlayingKey(null)
+  }
 
   const data = detailsByKey[currentKey] ?? null
   const recs = recsByKey[currentKey] ?? null
   const trailer = trailerByKey[currentKey]
-  const playing = playingKey === currentKey
+  const playing = open && playingKey === currentKey
+
+  const handleOpenChange = (next: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(next)
+    if (!next) {
+      setCurrent(item)
+      setPlayingKey(null)
+    }
+    onOpenChange?.(next)
+  }
+
+  const selectItem = (next: MediaItem) => {
+    setPlayingKey(null)
+    setCurrent(next)
+    scrollRef.current?.scrollTo({ top: 0 })
+  }
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+    titleRef.current?.focus({ preventScroll: true })
+  }, [currentKey])
+
+  useEffect(() => {
+    if (playing) stopTrailerRef.current?.focus({ preventScroll: true })
+  }, [playing])
 
   useEffect(() => {
     if (
@@ -96,7 +141,7 @@ export function DetailsDrawer({
       return
     }
     let cancelled = false
-    details({ mediaType: current.mediaType, tmdbId: current.tmdbId })
+    details({ mediaType, tmdbId })
       .then((result) => {
         if (!cancelled) {
           setDetailsByKey((prev) => ({ ...prev, [currentKey]: result }))
@@ -110,14 +155,14 @@ export function DetailsDrawer({
     return () => {
       cancelled = true
     }
-  }, [open, currentKey, current, detailsByKey, failedKeys, details])
+  }, [open, currentKey, mediaType, tmdbId, detailsByKey, failedKeys, details])
 
   useEffect(() => {
     if (!open || trailerByKey[currentKey] !== undefined) {
       return
     }
     let cancelled = false
-    videosAction({ mediaType: current.mediaType, tmdbId: current.tmdbId })
+    videosAction({ mediaType, tmdbId })
       .then((result) => {
         if (!cancelled) {
           setTrailerByKey((prev) => ({ ...prev, [currentKey]: result }))
@@ -131,7 +176,7 @@ export function DetailsDrawer({
     return () => {
       cancelled = true
     }
-  }, [open, currentKey, current, trailerByKey, videosAction])
+  }, [open, currentKey, mediaType, tmdbId, trailerByKey, videosAction])
 
   useEffect(() => {
     if (
@@ -143,10 +188,7 @@ export function DetailsDrawer({
       return
     }
     let cancelled = false
-    recommendationsAction({
-      mediaType: current.mediaType,
-      tmdbId: current.tmdbId,
-    })
+    recommendationsAction({ mediaType, tmdbId })
       .then((items) => {
         if (!cancelled) {
           setRecsByKey((prev) => ({ ...prev, [currentKey]: items }))
@@ -164,7 +206,8 @@ export function DetailsDrawer({
     open,
     data,
     currentKey,
-    current,
+    mediaType,
+    tmdbId,
     recsByKey,
     recsFailedKeys,
     recommendationsAction,
@@ -173,190 +216,231 @@ export function DetailsDrawer({
   const currentState =
     currentKey === originalKey ? state : stateByKey?.get(currentKey)
 
+  const retryDetails = () => {
+    setFailedKeys((prev) => {
+      const next = new Set(prev)
+      next.delete(currentKey)
+      return next
+    })
+  }
+
+  const retryRecommendations = () => {
+    setRecsFailedKeys((prev) => {
+      const next = new Set(prev)
+      next.delete(currentKey)
+      return next
+    })
+  }
+
   return (
     <>
       {trigger ? (
-        trigger(() => setOpen(true))
+        trigger(() => handleOpenChange(true))
       ) : (
         <Button
           variant="ghost"
           size="icon-xs"
           className="-mr-1.5 ml-auto text-muted-foreground"
           aria-label={`Details for ${item.title}`}
-          onClick={() => setOpen(true)}
+          onClick={() => handleOpenChange(true)}
         >
           <HugeiconsIcon icon={MoreHorizontalIcon} />
         </Button>
       )}
       <Drawer
         open={open}
-        onOpenChange={(next) => {
-          setOpen(next)
-          // Reopening always starts from the card that was clicked.
-          if (!next) {
-            setCurrent(item)
-            setPlayingKey(null)
-          }
-        }}
+        onOpenChange={handleOpenChange}
+        onOpenChangeComplete={onOpenChangeComplete}
         showSwipeHandle
       >
-        <DrawerContent>
-          <div className="mx-auto flex min-h-0 w-full flex-col overflow-y-auto md:max-w-2xl">
-            {/* Cinematic hero: backdrop bleeding into the page background,
-                wordmark + facts + genre chips anchored bottom-left. While the
-                trailer plays, the embed replaces the backdrop. */}
-            <div className="relative shrink-0 overflow-hidden">
+        <DrawerContent
+          className="h-[calc(100dvh-6rem)]"
+          finalFocus={finalFocus}
+        >
+          {/* Outside the scroll viewport, so close/back remain reachable. The
+              single title and description label every loading/playback state. */}
+          <div className="flex shrink-0 items-center gap-2 px-4 py-2">
+            {drilling && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Back to ${item.title}`}
+                title={`Back to ${item.title}`}
+                onClick={() => selectItem(item)}
+              >
+                <HugeiconsIcon icon={ArrowLeft01Icon} />
+              </Button>
+            )}
+            <DrawerTitle
+              ref={titleRef}
+              tabIndex={-1}
+              className="min-w-0 flex-1 truncate"
+              title={current.title}
+            >
+              {current.title}
+            </DrawerTitle>
+            <DrawerDescription className="sr-only">
+              {current.mediaType === "movie" ? "Movie" : "Show"}
+              {current.year ? ` · ${current.year}` : ""}. Details and watch
+              history.
+            </DrawerDescription>
+            {playing && (
+              <Button
+                ref={stopTrailerRef}
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setPlayingKey(null)
+                  titleRef.current?.focus({ preventScroll: true })
+                }}
+              >
+                Stop trailer
+              </Button>
+            )}
+            <DrawerClose
+              render={<Button variant="outline" size="sm" />}
+              aria-label="Close details"
+            >
+              <HugeiconsIcon icon={Cancel01Icon} />
+              Close
+            </DrawerClose>
+          </div>
+          <ScrollArea className="min-h-0 flex-1" viewportRef={scrollRef}>
+            {/* Full-width artwork, but a capped height even on wide displays. */}
+            <div className="relative h-[clamp(15rem,38vw,25rem)] max-h-[55dvh] w-full overflow-hidden bg-muted">
               {playing && trailer ? (
-                <>
-                  <DrawerTitle className="sr-only">{current.title}</DrawerTitle>
-                  <iframe
-                    src={`https://www.youtube-nocookie.com/embed/${trailer.key}?autoplay=1&rel=0`}
-                    title={trailer.name}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    className="aspect-[16/9] w-full shrink-0 bg-black"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="absolute top-2 right-2 rounded-full bg-background/80 backdrop-blur"
-                    aria-label="Close trailer"
-                    onClick={() => setPlayingKey(null)}
-                  >
-                    <HugeiconsIcon icon={Cancel01Icon} />
-                  </Button>
-                </>
+                <iframe
+                  src={`https://www.youtube-nocookie.com/embed/${trailer.key}?autoplay=1&rel=0`}
+                  title={`${current.title}: ${trailer.name}`}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  className="absolute inset-0 size-full bg-black"
+                />
               ) : (
                 <>
                   {data === null && !failedKeys.has(currentKey) ? (
-                    <div className="aspect-[16/9] w-full shrink-0 animate-pulse bg-muted" />
+                    <div className="absolute inset-0 animate-pulse bg-muted" />
                   ) : data?.backdropPath ? (
                     <Image
-                      src={tmdbBackdropUrl(data.backdropPath)}
-                      alt={`${current.title} backdrop`}
-                      width={1280}
-                      height={720}
-                      priority
-                      sizes="(max-width: 768px) 100vw, 672px"
-                      className="aspect-[16/9] w-full shrink-0 object-cover"
+                      src={tmdbBackdropUrl(data.backdropPath, "w1280")}
+                      alt=""
+                      fill
+                      loading="eager"
+                      sizes="calc(100vw - 18px)"
+                      className="object-cover"
                     />
-                  ) : (
-                    <div className="aspect-[16/9] w-full shrink-0 bg-muted" />
-                  )}
-
-                  {/* Fade into the page in both themes */}
+                  ) : null}
                   <div
                     aria-hidden
                     className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent"
                   />
-
-                  {data !== null && !failedKeys.has(currentKey) && (
-                    <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 px-6 pb-5">
-                      {data.logoPath ? (
-                        <Image
-                          src={tmdbLogoUrl(data.logoPath)}
-                          alt={current.title}
-                          width={260}
-                          height={96}
-                          sizes="260px"
-                          className="max-h-16 w-auto max-w-[65%] self-start object-contain drop-shadow-lg"
-                          priority
-                        />
-                      ) : (
-                        <DrawerTitle className="text-2xl font-bold tracking-tight drop-shadow-lg">
-                          {current.title}
-                        </DrawerTitle>
-                      )}
-                      <DrawerDescription className="sr-only">
-                        {current.mediaType === "movie" ? "Movie" : "Show"}
-                        {current.year ? ` · ${current.year}` : ""}
-                      </DrawerDescription>
-                      <HeroFacts data={data} item={current} />
-                      {data.genres.length > 0 && (
-                        <div className="mt-0.5 flex flex-wrap gap-1.5">
-                          {data.genres.slice(0, 4).map((genre) => (
-                            <span
-                              key={genre}
-                              className="rounded-full border border-border/70 px-2.5 py-0.5 text-xs text-foreground/85 backdrop-blur-sm"
-                            >
-                              {genre}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div className="absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-2xl flex-col gap-2 px-6 pb-5">
+                    {data?.logoPath ? (
+                      <Image
+                        src={tmdbLogoUrl(data.logoPath)}
+                        alt={current.title}
+                        width={260}
+                        height={96}
+                        sizes="(max-width: 480px) 60vw, 260px"
+                        className="max-h-16 w-auto max-w-[65%] self-start object-contain drop-shadow-lg"
+                        loading="eager"
+                      />
+                    ) : (
+                      <p className="line-clamp-3 text-2xl font-bold tracking-tight break-words drop-shadow-lg">
+                        {current.title}
+                      </p>
+                    )}
+                    {data !== null && (
+                      <>
+                        <HeroFacts data={data} item={current} />
+                        {data.genres.length > 0 && (
+                          <div className="mt-0.5 flex flex-wrap gap-1.5">
+                            {data.genres.slice(0, 4).map((genre) => (
+                              <span
+                                key={genre}
+                                className="rounded-full border border-border/70 px-2.5 py-0.5 text-xs text-foreground/85 backdrop-blur-sm"
+                              >
+                                {genre}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </>
               )}
             </div>
 
-            {/* Drill-down navigation */}
-            {drilling && (
-              <div className="px-6 pt-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="-ml-2"
-                  onClick={() => setCurrent(item)}
-                >
-                  <HugeiconsIcon icon={ArrowLeft01Icon} />
-                  Back to {item.title}
-                </Button>
-              </div>
-            )}
+            {/* Only the reading column is constrained; the scrollbar stays at
+                the far edge of the full-width drawer. */}
+            <div className="mx-auto w-full max-w-2xl pb-6">
+              {data !== null && !failedKeys.has(currentKey) && (
+                <div className="flex flex-wrap items-center gap-1.5 px-6 pt-4">
+                  <ItemActions
+                    key={currentKey}
+                    item={current}
+                    state={currentState}
+                    collections={collections}
+                    layout="row"
+                  />
+                  {trailer && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={playing}
+                      onClick={() => {
+                        setPlayingKey(currentKey)
+                        scrollRef.current?.scrollTo({ top: 0 })
+                      }}
+                    >
+                      <HugeiconsIcon icon={PlayIcon} />
+                      Play trailer
+                    </Button>
+                  )}
+                </div>
+              )}
 
-            {/* Actions */}
-            {data !== null && !failedKeys.has(currentKey) && (
-              <div className="flex flex-wrap items-center gap-1.5 px-6 pt-4">
-                <ItemActions
-                  item={current}
-                  state={currentState}
-                  collections={collections}
-                  layout="row"
-                />
-                {trailer && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setPlayingKey(currentKey)}
-                  >
-                    <HugeiconsIcon icon={PlayIcon} />
-                    Play trailer
-                  </Button>
+              <div className="px-6 py-4 text-sm">
+                {failedKeys.has(currentKey) ? (
+                  <div className="flex flex-col items-start gap-2">
+                    <p role="alert" className="text-muted-foreground">
+                      Couldn&rsquo;t load details.
+                    </p>
+                    <Button variant="outline" size="sm" onClick={retryDetails}>
+                      Try again
+                    </Button>
+                  </div>
+                ) : data === null ? (
+                  <p role="status" className="text-muted-foreground">
+                    Loading details…
+                  </p>
+                ) : (
+                  <DrawerDetails data={data} />
                 )}
               </div>
-            )}
 
-            {/* Overview */}
-            <div className="px-6 py-4 text-sm">
-              {failedKeys.has(currentKey) ? (
-                <p className="text-muted-foreground">
-                  Couldn&rsquo;t load details. Close and try again.
-                </p>
-              ) : data === null ? (
-                <p className="text-muted-foreground">Loading details…</p>
-              ) : (
-                <DrawerDetails data={data} />
+              {!failedKeys.has(currentKey) &&
+                data !== null &&
+                current.mediaType === "tv" &&
+                data.seasons.length > 0 && (
+                  <EpisodesSection
+                    key={currentKey}
+                    item={current}
+                    data={data}
+                  />
+                )}
+
+              {!failedKeys.has(currentKey) && data !== null && (
+                <MoreLikeThis
+                  recs={recs}
+                  failed={recsFailedKeys.has(currentKey)}
+                  onRetry={retryRecommendations}
+                  onSelect={selectItem}
+                />
               )}
             </div>
-
-            {/* Episodes (shows with seasons only) */}
-            {!failedKeys.has(currentKey) &&
-              data !== null &&
-              current.mediaType === "tv" &&
-              data.seasons.length > 0 && (
-                <EpisodesSection item={current} data={data} />
-              )}
-
-            {/* More like this */}
-            {!failedKeys.has(currentKey) && data !== null && (
-              <MoreLikeThis
-                recs={recs}
-                failed={recsFailedKeys.has(currentKey)}
-                onSelect={setCurrent}
-              />
-            )}
-          </div>
+          </ScrollArea>
         </DrawerContent>
       </Drawer>
     </>
@@ -415,18 +499,19 @@ function HeroFacts({ data, item }: { data: ShowDetails; item: MediaItem }) {
   )
 }
 
-// Poster row of native TMDB recommendations. Selecting a tile swaps the
-// drawer to that title; failures stay quiet (it's a bonus section).
+// Recommendations drill into this drawer rather than opening another modal.
 function MoreLikeThis({
   recs,
   failed,
+  onRetry,
   onSelect,
 }: {
   recs: MediaItem[] | null
   failed: boolean
+  onRetry: () => void
   onSelect: (item: MediaItem) => void
 }) {
-  if (failed || (recs !== null && recs.length === 0)) {
+  if (recs !== null && recs.length === 0) {
     return null
   }
   return (
@@ -434,46 +519,58 @@ function MoreLikeThis({
       <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
         More like this
       </h3>
-      <div className="hide-scrollbar -mx-6 mt-3 flex gap-2.5 overflow-x-auto px-6 pb-1">
-        {recs === null
-          ? Array.from({ length: 6 }, (_, i) => (
-              <div key={i} className="flex w-20 shrink-0 flex-col gap-1">
-                <div className="aspect-2/3 w-full animate-pulse rounded-md bg-muted" />
-                <div className="h-3 w-3/4 rounded bg-muted" />
-              </div>
-            ))
-          : recs.map((rec) => (
-              <button
-                key={`${rec.mediaType}:${rec.tmdbId}`}
-                type="button"
-                onClick={() => onSelect(rec)}
-                className="flex w-20 shrink-0 cursor-pointer flex-col gap-1 text-left"
-              >
-                <div className="aspect-2/3 w-full overflow-hidden rounded-md bg-muted transition-[filter] hover:brightness-90">
-                  {rec.posterPath ? (
-                    <Image
-                      src={tmdbPosterUrl(rec.posterPath)}
-                      alt={rec.title}
-                      width={120}
-                      height={180}
-                      sizes="80px"
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-muted-foreground">
-                      <HugeiconsIcon
-                        icon={ImageNotFound01Icon}
-                        className="size-5"
-                      />
-                    </div>
-                  )}
+      {failed ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <p role="status" className="text-sm text-muted-foreground">
+            Couldn&rsquo;t load recommendations.
+          </p>
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            Try again
+          </Button>
+        </div>
+      ) : (
+        <div className="hide-scrollbar -mx-6 mt-3 flex gap-2.5 overflow-x-auto px-6 py-1">
+          {recs === null
+            ? Array.from({ length: 6 }, (_, i) => (
+                <div key={i} className="flex w-20 shrink-0 flex-col gap-1">
+                  <div className="aspect-2/3 w-full animate-pulse rounded-md bg-muted" />
+                  <div className="h-3 w-3/4 rounded bg-muted" />
                 </div>
-                <span className="truncate text-xs text-muted-foreground">
-                  {rec.title}
-                </span>
-              </button>
-            ))}
-      </div>
+              ))
+            : recs.map((rec) => (
+                <button
+                  key={`${rec.mediaType}:${rec.tmdbId}`}
+                  type="button"
+                  onClick={() => onSelect(rec)}
+                  aria-label={`Details for ${rec.title}`}
+                  className="flex w-20 shrink-0 cursor-pointer flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div className="aspect-2/3 w-full overflow-hidden rounded-md bg-muted transition-[filter] hover:brightness-90">
+                    {rec.posterPath ? (
+                      <Image
+                        src={tmdbPosterUrl(rec.posterPath)}
+                        alt={rec.title}
+                        width={120}
+                        height={180}
+                        sizes="80px"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-muted-foreground">
+                        <HugeiconsIcon
+                          icon={ImageNotFound01Icon}
+                          className="size-5"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <span className="w-full truncate text-xs text-muted-foreground">
+                    {rec.title}
+                  </span>
+                </button>
+              ))}
+        </div>
+      )}
     </div>
   )
 }

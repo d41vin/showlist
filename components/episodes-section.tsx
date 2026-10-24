@@ -9,7 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { useAction, useMutation, useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import Image from "next/image"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -25,6 +25,9 @@ import { cn } from "@/lib/utils"
 
 type ShowDetails = FunctionReturnType<typeof api.tmdb.details>
 type SeasonEpisodes = FunctionReturnType<typeof api.tmdb.tvSeason>
+type WatchChange =
+  | { kind: "episode"; season: number; episode: number }
+  | { kind: "season"; season: number; episodes: number[]; watched: boolean }
 
 // The details drawer's Episodes section: season chips, episode rows with
 // watched ticks (PrimeWire-style one-tap), per-season bulk mark/clear.
@@ -52,6 +55,10 @@ export function EpisodesSection({
   const toggleEpisode = useMutation(api.episodes.toggle)
   const setSeasonWatched = useMutation(api.episodes.setSeason)
   const seasonAction = useAction(api.tmdb.tvSeason)
+  const savingRef = useRef(false)
+  const [pendingChange, setPendingChange] = useState<WatchChange | null>(null)
+  const [failedChange, setFailedChange] = useState<WatchChange | null>(null)
+  const saving = pendingChange !== null
 
   const watchedKeys = useMemo(() => {
     const keys = new Set<string>()
@@ -114,6 +121,37 @@ export function EpisodesSection({
   ).length
   const allMarked = episodes.length > 0 && watchedCount === episodes.length
 
+  const saveChange = async (change: WatchChange) => {
+    // The ref also blocks a second click before React renders disabled controls.
+    // Serialize bulk and individual changes so they cannot overwrite each other.
+    if (savingRef.current || watches === undefined) return
+    savingRef.current = true
+    setPendingChange(change)
+    setFailedChange(null)
+    try {
+      if (change.kind === "episode") {
+        await toggleEpisode({
+          item: snapshot,
+          season: change.season,
+          episode: change.episode,
+        })
+      } else {
+        await setSeasonWatched({
+          item: snapshot,
+          season: change.season,
+          episodes: change.episodes,
+          watched: change.watched,
+        })
+      }
+    } catch {
+      // Retry the original action even if the user has since switched seasons.
+      setFailedChange(change)
+    } finally {
+      savingRef.current = false
+      setPendingChange(null)
+    }
+  }
+
   return (
     <div className="border-t px-6 py-4">
       <div className="flex items-baseline justify-between gap-2">
@@ -121,10 +159,38 @@ export function EpisodesSection({
           Episodes
         </h3>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {episodes.length > 0 ? `${watchedCount}/${episodes.length}` : ""}
+          {watches !== undefined && episodes.length > 0
+            ? `${watchedCount}/${episodes.length}`
+            : ""}
         </span>
       </div>
-      {episodes.length > 0 && (
+      {failedChange && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <p role="alert" className="text-sm text-destructive">
+            Couldn&rsquo;t save{" "}
+            {failedChange.kind === "episode"
+              ? `S${failedChange.season}E${failedChange.episode}`
+              : `season ${failedChange.season}`}
+            .
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={saving || watches === undefined}
+            onClick={() => void saveChange(failedChange)}
+          >
+            Try again
+          </Button>
+        </div>
+      )}
+      <p role="status" className="sr-only">
+        {saving
+          ? "Saving watch history…"
+          : watches === undefined
+            ? "Loading watch history…"
+            : ""}
+      </p>
+      {watches !== undefined && episodes.length > 0 && (
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
           <div
             className="h-full rounded-full bg-primary transition-[width]"
@@ -143,9 +209,12 @@ export function EpisodesSection({
             variant={seasonSummary.season === season ? "default" : "secondary"}
             size="sm"
             className={cn(
-              "shrink-0",
+              "max-w-48 shrink-0",
               seasonSummary.posterPath && "gap-1.5 pl-1.5"
             )}
+            aria-pressed={seasonSummary.season === season}
+            aria-label={seasonSummary.name || `Season ${seasonSummary.season}`}
+            title={seasonSummary.name || `Season ${seasonSummary.season}`}
             onClick={() => setSelected(seasonSummary.season)}
           >
             {seasonSummary.posterPath && (
@@ -155,10 +224,10 @@ export function EpisodesSection({
                 width={16}
                 height={24}
                 sizes="16px"
-                className="h-6 w-4 rounded-[4px] object-cover"
+                className="h-6 w-4 shrink-0 rounded-[4px] object-cover"
               />
             )}
-            {seasonChipLabel(seasonSummary)}
+            <span className="truncate">{seasonChipLabel(seasonSummary)}</span>
           </Button>
         ))}
       </div>
@@ -166,16 +235,17 @@ export function EpisodesSection({
       {/* Season name + bulk action */}
       {episodes.length > 0 && (
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
+          <p className="min-w-0 text-xs break-words text-muted-foreground">
             {seasonData?.name ?? `Season ${season}`}
           </p>
           <Button
             variant="ghost"
             size="sm"
             className="-mr-2 h-7 px-2 text-xs"
+            disabled={saving || watches === undefined}
             onClick={() =>
-              setSeasonWatched({
-                item: snapshot,
+              void saveChange({
+                kind: "season",
                 season,
                 episodes: episodes.map((episode) => episode.episode),
                 watched: !allMarked,
@@ -183,7 +253,11 @@ export function EpisodesSection({
             }
           >
             <HugeiconsIcon icon={CheckIcon} />
-            {allMarked ? "Clear all" : "Mark all"}
+            {pendingChange?.kind === "season" && pendingChange.season === season
+              ? "Saving…"
+              : allMarked
+                ? "Clear all"
+                : "Mark all"}
           </Button>
         </div>
       )}
@@ -208,13 +282,19 @@ export function EpisodesSection({
         ) : (
           episodes.map((episode) => (
             <EpisodeRow
-              key={episode.episode}
+              key={`${season}:${episode.episode}`}
               season={season}
               episode={episode}
               watched={watchedKeys.has(`${season}:${episode.episode}`)}
+              disabled={saving || watches === undefined}
+              saving={
+                pendingChange?.kind === "episode" &&
+                pendingChange.season === season &&
+                pendingChange.episode === episode.episode
+              }
               onToggle={() =>
-                toggleEpisode({
-                  item: snapshot,
+                void saveChange({
+                  kind: "episode",
                   season,
                   episode: episode.episode,
                 })
@@ -238,14 +318,19 @@ function EpisodeRow({
   season,
   episode,
   watched,
+  disabled,
+  saving,
   onToggle,
 }: {
   season: number
   episode: SeasonEpisodes["episodes"][number]
   watched: boolean
+  disabled: boolean
+  saving: boolean
   onToggle: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
+  const overviewId = useId()
   const aired = episode.airDate === null || episode.airDate <= localTodayISO()
   const hasOverview =
     episode.overview !== null && episode.overview.trim() !== ""
@@ -258,6 +343,9 @@ function EpisodeRow({
       <div className="flex items-center gap-2.5">
         <Checkbox
           checked={watched}
+          disabled={disabled}
+          aria-busy={saving}
+          className="shrink-0"
           onCheckedChange={() => onToggle()}
           aria-label={`Mark S${season}E${episode.episode} ${
             watched ? "unwatched" : "watched"
@@ -270,7 +358,7 @@ function EpisodeRow({
             width={72}
             height={40}
             sizes="72px"
-            className="aspect-video w-18 shrink-0 rounded-md object-cover"
+            className="aspect-video h-auto w-18 shrink-0 rounded-md object-cover"
           />
         ) : (
           <div className="flex aspect-video w-18 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
@@ -278,13 +366,17 @@ function EpisodeRow({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">
+          <p
+            className="truncate text-sm font-medium"
+            title={episode.name ?? "TBA"}
+          >
             {episode.episode}. {episode.name ?? "TBA"}
           </p>
           <p className="text-xs text-muted-foreground">
             {formatAirDate(episode.airDate)}
             {episode.runtime !== null ? ` · ${episode.runtime}m` : ""}
             {!aired ? " · unaired" : ""}
+            {saving ? " · saving…" : ""}
           </p>
         </div>
         {hasOverview && (
@@ -293,6 +385,7 @@ function EpisodeRow({
             size="icon-xs"
             className="-mr-1 text-muted-foreground"
             aria-expanded={expanded}
+            aria-controls={expanded ? overviewId : undefined}
             aria-label={`Synopsis for S${season}E${episode.episode}`}
             onClick={() => setExpanded((prev) => !prev)}
           >
@@ -304,7 +397,10 @@ function EpisodeRow({
         )}
       </div>
       {expanded && hasOverview && (
-        <p className="mt-1.5 pr-8 pl-14 text-xs leading-relaxed text-muted-foreground">
+        <p
+          id={overviewId}
+          className="mt-1.5 pr-8 pl-14 text-xs leading-relaxed break-words text-muted-foreground"
+        >
           {episode.overview}
         </p>
       )}

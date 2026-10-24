@@ -471,8 +471,8 @@ test("partial TMDB failures retain successful totals without overwriting failed 
       })),
     })
   ).toEqual({
-    movieMinutes: 200,
-    moviesWithRuntime: 2,
+    movieMinutes: 350,
+    moviesWithRuntime: 3,
     episodeMinutes: 69,
     episodesWithRuntime: 2,
     limited: false,
@@ -530,6 +530,7 @@ test.each([
     const hasSeasons = seasonCount > 0
     expect(
       await t.action(api.stats.get, {
+        refreshMissing: true,
         // Duplicates before the unique entries must not use up the 300 slots.
         movieIds: [
           ...(movieCount > 0 ? Array<number>(301).fill(1) : []),
@@ -589,4 +590,198 @@ test("uncached requests retain six-item chunks", async () => {
   // Each of the six movie items fetches details and images in parallel.
   expect(peak).toEqual({ movie: 12, tv: 6 })
   expect(fetchMock).toHaveBeenCalledTimes(21)
+})
+
+test("refreshMissing retries only incomplete selections and preserves full shared payloads", async () => {
+  const t = setup()
+  const artwork = { logos: [{ iso_639_1: "en", file_path: "/logo.png" }] }
+  await cache(
+    t,
+    "details:movie:1:v2",
+    normalizeDetails({ runtime: null, overview: "Old" }, artwork, "movie")
+  )
+  await cache(
+    t,
+    "details:movie:2:v2",
+    normalizeDetails({ runtime: 120, overview: "Complete" }, artwork, "movie")
+  )
+  await cache(
+    t,
+    "tv:100:season:1:v1",
+    normalizeSeasonEpisodes({
+      episodes: [
+        { episode_number: 1, runtime: 20 },
+        { episode_number: 2, runtime: null },
+      ],
+    })
+  )
+  // An unselected missing runtime must not make this selection incomplete.
+  await cache(
+    t,
+    "tv:100:season:2:v1",
+    normalizeSeasonEpisodes({
+      episodes: [
+        { episode_number: 1, runtime: 30 },
+        { episode_number: 2, runtime: null },
+      ],
+    })
+  )
+  const completeKeys = ["details:movie:2:v2", "tv:100:season:2:v1"]
+  const completeBefore = await t.query(internal.tmdb_cache.getBatch, {
+    keys: completeKeys,
+  })
+  const request = {
+    movieIds: [1, 2],
+    tvSeasons: [
+      { tmdbId: 100, season: 1, episodes: [1, 2, 3] },
+      { tmdbId: 100, season: 2, episodes: [1] },
+    ],
+  }
+  const before = {
+    ...ZERO_TOTALS,
+    movieMinutes: 120,
+    moviesWithRuntime: 1,
+    episodeMinutes: 50,
+    episodesWithRuntime: 2,
+  }
+  expect(await t.action(api.stats.get, request)).toEqual(before)
+  expect(
+    await t.action(api.stats.get, { ...request, refreshMissing: false })
+  ).toEqual(before)
+  expect(fetchMock).not.toHaveBeenCalled()
+
+  const movie = {
+    runtime: 90,
+    overview: "Updated full details",
+    backdrop_path: "/backdrop.jpg",
+  }
+  const season = {
+    name: "Full season",
+    episodes: [
+      { episode_number: 1, runtime: 20, name: "One" },
+      { episode_number: 2, runtime: 25, name: "Two" },
+      { episode_number: 3, runtime: 40, name: "Three" },
+      { episode_number: 4, runtime: 50, name: "Not selected" },
+    ],
+  }
+  mockTmdb({
+    "/movie/1": movie,
+    "/movie/1/images": artwork,
+    "/tv/100/season/1": season,
+  })
+  const expected = {
+    ...ZERO_TOTALS,
+    movieMinutes: 210,
+    moviesWithRuntime: 2,
+    episodeMinutes: 115,
+    episodesWithRuntime: 4,
+  }
+  expect(
+    await t.action(api.stats.get, { ...request, refreshMissing: true })
+  ).toEqual(expected)
+  expect(
+    await t.query(internal.tmdb_cache.getBatch, { keys: completeKeys })
+  ).toEqual(completeBefore)
+  expect(
+    await t.query(internal.tmdb_cache.getBatch, {
+      keys: ["details:movie:1:v2", "tv:100:season:1:v1"],
+    })
+  ).toEqual([
+    { payload: normalizeDetails(movie, artwork, "movie"), fetchedAt: NOW },
+    { payload: normalizeSeasonEpisodes(season), fetchedAt: NOW },
+  ])
+  expect(
+    await t.action(api.stats.get, { ...request, refreshMissing: true })
+  ).toEqual(expected)
+  expect(fetchMock).toHaveBeenCalledTimes(3)
+})
+
+test("failed refresh retains known runtimes and does not overwrite fresh incomplete entries", async () => {
+  const t = setup()
+  await cache(
+    t,
+    "details:movie:1:v2",
+    normalizeDetails({ runtime: null }, {}, "movie")
+  )
+  await cache(
+    t,
+    "tv:100:season:1:v1",
+    normalizeSeasonEpisodes({
+      episodes: [
+        { episode_number: 1, runtime: 20 },
+        { episode_number: 2, runtime: null },
+      ],
+    })
+  )
+  const keys = ["details:movie:1:v2", "tv:100:season:1:v1"]
+  const before = await t.query(internal.tmdb_cache.getBatch, { keys })
+  expect(
+    await t.action(api.stats.get, {
+      movieIds: [1],
+      tvSeasons: [{ tmdbId: 100, season: 1, episodes: [1, 2] }],
+      refreshMissing: true,
+    })
+  ).toEqual({ ...ZERO_TOTALS, episodeMinutes: 20, episodesWithRuntime: 1 })
+  expect(await t.query(internal.tmdb_cache.getBatch, { keys })).toEqual(before)
+  expect(fetchMock).toHaveBeenCalledTimes(3)
+})
+
+test.each(["missing", "stale", "incomplete"])(
+  "movie image failure still counts runtime without changing %s shared artwork",
+  async (mode) => {
+    const t = setup()
+    const key = "details:movie:1:v2"
+    if (mode !== "missing") {
+      await cache(
+        t,
+        key,
+        normalizeDetails(
+          { runtime: mode === "stale" ? 100 : null, overview: "Keep me" },
+          { logos: [{ iso_639_1: "en", file_path: "/keep.png" }] },
+          "movie"
+        ),
+        mode === "stale" ? NOW - 6 * HOUR : NOW
+      )
+    }
+    const before = await t.query(internal.tmdb_cache.getBatch, { keys: [key] })
+    mockTmdb({
+      "/movie/1": { runtime: 125, overview: "New details" },
+      "/movie/1/images": new Error("Images unavailable"),
+    })
+    expect(
+      await t.action(api.stats.get, {
+        movieIds: [1],
+        tvSeasons: [],
+        refreshMissing: true,
+      })
+    ).toEqual({ ...ZERO_TOTALS, movieMinutes: 125, moviesWithRuntime: 1 })
+    expect(
+      await t.query(internal.tmdb_cache.getBatch, { keys: [key] })
+    ).toEqual(before)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  }
+)
+
+test("empty seasons cannot consume the cap or hide a nonempty selection", async () => {
+  const t = setup()
+  await cache(
+    t,
+    "tv:100:season:300:v1",
+    normalizeSeasonEpisodes({ episodes: [{ episode_number: 1, runtime: 20 }] })
+  )
+  expect(
+    await t.action(api.stats.get, {
+      movieIds: [],
+      tvSeasons: [
+        ...Array.from({ length: 300 }, (_, season) => ({
+          tmdbId: 100,
+          season,
+          episodes: [],
+        })),
+        { tmdbId: 100, season: 300, episodes: [1] },
+      ],
+      refreshMissing: true,
+    })
+  ).toEqual({ ...ZERO_TOTALS, episodeMinutes: 20, episodesWithRuntime: 1 })
+  expect(fetchMock).not.toHaveBeenCalled()
 })

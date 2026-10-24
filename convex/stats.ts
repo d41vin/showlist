@@ -1,5 +1,6 @@
 import { v } from "convex/values"
 
+import { RUNTIME_REQUEST_CAP } from "../lib/stats"
 import { internal } from "./_generated/api"
 import { action } from "./_generated/server"
 import { normalizeDetails, normalizeSeasonEpisodes, tmdbFetch } from "./tmdb"
@@ -12,7 +13,7 @@ import { normalizeDetails, normalizeSeasonEpisodes, tmdbFetch } from "./tmdb"
 const DETAILS_TTL_MS = 6 * 60 * 60 * 1000
 const SEASON_TTL_MS = 24 * 60 * 60 * 1000
 const FETCH_CHUNK = 6
-const CAP = 300
+const CAP = RUNTIME_REQUEST_CAP
 
 type CacheEntry = { payload: unknown; fetchedAt: number }
 type SeasonSelection = {
@@ -24,6 +25,7 @@ type SeasonSelection = {
 export const get = action({
   args: {
     movieIds: v.array(v.number()),
+    refreshMissing: v.optional(v.boolean()),
     tvSeasons: v.array(
       v.object({
         tmdbId: v.number(),
@@ -66,11 +68,12 @@ export const get = action({
       }
       uniqueSeasons.set(key, selection)
     }
-    const limited = uniqueMovieIds.length > CAP || uniqueSeasons.size > CAP
+    const selectedSeasons = [...uniqueSeasons.values()].filter(
+      ({ episodes }) => episodes.size > 0
+    )
+    const limited = uniqueMovieIds.length > CAP || selectedSeasons.length > CAP
     const movieIds = uniqueMovieIds.slice(0, CAP)
-    const seasons = [...uniqueSeasons.values()]
-      .slice(0, CAP)
-      .filter(({ episodes }) => episodes.size > 0)
+    const seasons = selectedSeasons.slice(0, CAP)
     let movieMinutes = 0
     let moviesWithRuntime = 0
     let episodeMinutes = 0
@@ -97,6 +100,8 @@ export const get = action({
         if (hasRuntime(runtime)) {
           movieMinutes += runtime
           moviesWithRuntime += 1
+        } else if (args.refreshMissing) {
+          staleMovieIds.push(movieIds[i])
         }
       } else {
         staleMovieIds.push(movieIds[i])
@@ -105,29 +110,28 @@ export const get = action({
     for (const chunk of chunks(staleMovieIds, FETCH_CHUNK)) {
       const results = await Promise.all(
         chunk.map(async (id) => {
-          try {
-            const [data, images] = await Promise.all([
-              tmdbFetch(`/movie/${id}`, {}),
-              tmdbFetch(`/movie/${id}/images`, {
-                include_image_language: "en,null",
-              }),
-            ])
-            return { id, data, images }
-          } catch {
-            return { id, data: null, images: null }
-          }
+          // Artwork failure must not discard a successful runtime response.
+          const [data, images] = await Promise.all([
+            tmdbFetch(`/movie/${id}`, {}).catch(() => null),
+            tmdbFetch(`/movie/${id}/images`, {
+              include_image_language: "en,null",
+            }).catch(() => null),
+          ])
+          return { id, data, images }
         })
       )
       for (const { id, data, images } of results) {
         if (data === null) continue
-        // Full normalized payload — this key is shared with the details
-        // drawer; a runtime-only entry would blank the drawer header.
+        // This key is shared with the drawer. Count runtime on image failure,
+        // but never write a partial payload that would erase cached artwork.
         const payload = normalizeDetails(data, images ?? {}, "movie")
-        toWrite.push({
-          key: `details:movie:${id}:v2`,
-          payload,
-          fetchedAt: Date.now(),
-        })
+        if (images !== null) {
+          toWrite.push({
+            key: `details:movie:${id}:v2`,
+            payload,
+            fetchedAt: Date.now(),
+          })
+        }
         if (hasRuntime(payload.runtime)) {
           movieMinutes += payload.runtime
           moviesWithRuntime += 1
@@ -145,36 +149,50 @@ export const get = action({
             keys: seasonKeys,
           })) as CacheEntry[])
         : []
-    const staleSeasons: SeasonSelection[] = []
+    const staleSeasons: {
+      selection: SeasonSelection
+      fallback?: { minutes: number; count: number }
+    }[] = []
     for (let i = 0; i < seasons.length; i++) {
       const entry = cachedSeasons[i]
+      const selection = seasons[i]
       if (
         entry?.payload != null &&
         Date.now() - entry.fetchedAt < SEASON_TTL_MS
       ) {
-        const totals = selectedEpisodeTotals(entry.payload, seasons[i].episodes)
-        episodeMinutes += totals.minutes
-        episodesWithRuntime += totals.count
+        const totals = selectedEpisodeTotals(entry.payload, selection.episodes)
+        if (args.refreshMissing && totals.count < selection.episodes.size) {
+          staleSeasons.push({ selection, fallback: totals })
+        } else {
+          episodeMinutes += totals.minutes
+          episodesWithRuntime += totals.count
+        }
       } else {
-        staleSeasons.push(seasons[i])
+        staleSeasons.push({ selection })
       }
     }
     for (const chunk of chunks(staleSeasons, FETCH_CHUNK)) {
       const results = await Promise.all(
-        chunk.map(async (selection) => {
+        chunk.map(async ({ selection, fallback }) => {
           const { tmdbId, season } = selection
           try {
             return {
               selection,
+              fallback,
               data: await tmdbFetch(`/tv/${tmdbId}/season/${season}`, {}),
             }
           } catch {
-            return { selection, data: null }
+            return { selection, fallback, data: null }
           }
         })
       )
-      for (const { selection, data } of results) {
-        if (data === null) continue
+      for (const { selection, fallback, data } of results) {
+        if (data === null) {
+          // A retry must not lose known totals from a still-fresh entry.
+          episodeMinutes += fallback?.minutes ?? 0
+          episodesWithRuntime += fallback?.count ?? 0
+          continue
+        }
         const { tmdbId, season, episodes } = selection
         // Cache the entire season, never a caller's filtered selection.
         const payload = normalizeSeasonEpisodes(data)

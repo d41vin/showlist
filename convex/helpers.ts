@@ -27,6 +27,9 @@ export async function findItem(
   userId: string,
   snapshot: Snapshot
 ) {
+  if (!Number.isSafeInteger(snapshot.tmdbId) || snapshot.tmdbId <= 0) {
+    throw new Error("TMDB ID must be a safe positive integer")
+  }
   return await ctx.db
     .query("items")
     .withIndex("by_user_and_mediaType_and_tmdbId", (q) =>
@@ -49,16 +52,18 @@ export async function deleteIfFullyUnset(ctx: MutationCtx, doc: Doc<"items">) {
   ) {
     return
   }
-  // Episode ticks keep the item alive on their own: they reference the show
-  // by TMDB id, and deleting the doc would drop the show from the schedule.
-  const episodeWatch = await ctx.db
-    .query("episodeWatches")
-    .withIndex("by_user_and_tmdbId", (q) =>
-      q.eq("userId", doc.userId).eq("tmdbId", doc.tmdbId)
-    )
-    .first()
-  if (episodeWatch !== null) {
-    return
+  // Movie and TV IDs are separate namespaces. Only a show's own episode
+  // ticks keep it alive so it remains visible on the schedule.
+  if (doc.mediaType === "tv") {
+    const episodeWatch = await ctx.db
+      .query("episodeWatches")
+      .withIndex("by_user_and_tmdbId", (q) =>
+        q.eq("userId", doc.userId).eq("tmdbId", doc.tmdbId)
+      )
+      .first()
+    if (episodeWatch !== null) {
+      return
+    }
   }
   const membership = await ctx.db
     .query("collectionItems")

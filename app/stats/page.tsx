@@ -41,8 +41,11 @@ import {
   csvField,
   formatWatchTime,
   getActivityYears,
+  getLibraryCounts,
   getMonthlyActivity,
+  getRuntimeCoverage,
   getTopShows,
+  RUNTIME_REQUEST_CAP,
   type EpisodeWatch,
 } from "@/lib/stats"
 import { cn } from "@/lib/utils"
@@ -195,19 +198,10 @@ function StatsContent() {
     )
   }
 
-  const counts = useMemo(() => {
-    const items = myItems ?? []
-    return {
-      titles: items.length,
-      movies: items.filter((item) => item.mediaType === "movie").length,
-      shows: items.filter((item) => item.mediaType === "tv").length,
-      watchlist: items.filter((item) => item.inWatchlist).length,
-      watching: items.filter((item) => item.watching).length,
-      watched: items.filter((item) => item.watched).length,
-      liked: items.filter((item) => item.sentiment === "liked").length,
-      disliked: items.filter((item) => item.sentiment === "disliked").length,
-    }
-  }, [myItems])
+  const counts = useMemo(
+    () => getLibraryCounts(myItems ?? [], watches ?? []),
+    [myItems, watches]
+  )
   const rated = counts.liked + counts.disliked
 
   return (
@@ -248,7 +242,7 @@ function StatsContent() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button render={<Link href="/discover" />}>
+                <Button nativeButton={false} render={<Link href="/discover" />}>
                   Discover something to watch
                 </Button>
               </CardContent>
@@ -268,7 +262,7 @@ function StatsContent() {
               <Stat number={counts.titles} label="Titles tracked" big />
               <Stat number={counts.movies} label="Movies" big />
               <Stat number={counts.shows} label="Shows" big />
-              <Stat number={watches.length} label="Episodes logged" big />
+              <Stat number={counts.episodes} label="Episodes logged" big />
             </CardContent>
           </Card>
 
@@ -375,7 +369,10 @@ function WatchTimeSection({
     0
   )
   const empty = movieCount === 0 && episodeCount === 0
-  const [attempt, setAttempt] = useState(0)
+  const [retry, setRetry] = useState({ key: "", attempt: 0 })
+  const attempt = retry.key === requestKey ? retry.attempt : 0
+  const retryRuntimes = () =>
+    setRetry({ key: requestKey, attempt: attempt + 1 })
   const [response, setResponse] = useState<{
     key: string
     attempt: number
@@ -387,7 +384,7 @@ function WatchTimeSection({
     if (empty) return
     let cancelled = false
     const input: ReturnType<typeof buildRuntimeRequest> = JSON.parse(requestKey)
-    statsGet(input)
+    statsGet({ ...input, refreshMissing: attempt > 0 })
       .then((data) => {
         if (!cancelled)
           setResponse({ key: requestKey, attempt, data, failed: false })
@@ -407,12 +404,10 @@ function WatchTimeSection({
       : null
   const data = empty ? emptyWatchTime : current?.data
   const failed = !empty && current?.failed
-  const missing = data
-    ? movieCount +
-      episodeCount -
-      data.moviesWithRuntime -
-      data.episodesWithRuntime
-    : 0
+  const { missing, retryableMissing } = getRuntimeCoverage(
+    request,
+    data ?? emptyWatchTime
+  )
   const totalMinutes = data ? data.movieMinutes + data.episodeMinutes : 0
 
   return (
@@ -433,11 +428,7 @@ function WatchTimeSection({
               Couldn&rsquo;t load runtime data. Your library stats are still
               available.
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAttempt((value) => value + 1)}
-            >
+            <Button variant="outline" size="sm" onClick={retryRuntimes}>
               Try again
             </Button>
           </div>
@@ -489,18 +480,18 @@ function WatchTimeSection({
             {missing > 0 && (
               <div className="flex flex-wrap items-center gap-3" role="status">
                 <p className="text-xs text-muted-foreground">
-                  Some runtimes are unavailable, so this total is incomplete.
+                  {retryableMissing > 0
+                    ? "Some runtimes are unavailable, so this total is incomplete."
+                    : "All runtimes within the estimate limit are included."}
                   {data.limited
-                    ? " Estimates currently cover up to 300 movies and 300 seasons."
+                    ? ` Estimates cover up to ${RUNTIME_REQUEST_CAP} movies and ${RUNTIME_REQUEST_CAP} seasons; retrying cannot extend that limit.`
                     : ""}
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setAttempt((value) => value + 1)}
-                >
-                  Retry runtimes
-                </Button>
+                {retryableMissing > 0 && (
+                  <Button variant="outline" size="sm" onClick={retryRuntimes}>
+                    Retry runtimes
+                  </Button>
+                )}
               </div>
             )}
           </div>

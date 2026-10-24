@@ -1,28 +1,25 @@
 "use client"
 
 import {
-  AiMagicIcon,
   ArrowLeft01Icon,
   Folder01Icon,
   ImageNotFound01Icon,
   MoreVerticalIcon,
   PencilEdit01Icon,
   PlusSignIcon,
-  Search01Icon,
   Delete02Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { useAction, useConvexAuth, useQuery } from "convex/react"
+import { useConvexAuth, useQuery } from "convex/react"
 import Image from "next/image"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { useMemo, useState } from "react"
 
-import { AiDescribe } from "@/components/ai-describe"
 import {
   DeleteCollectionDialog,
   RenameCollectionDialog,
 } from "@/components/collection-admin-dialogs"
 import { CreateCollectionDialog } from "@/components/create-collection-dialog"
-import { MediaRow } from "@/components/media-row"
 import { ScheduleTab } from "@/components/schedule-tab"
 import { ShowCard } from "@/components/show-card"
 import { Button } from "@/components/ui/button"
@@ -57,10 +54,15 @@ import {
   type MediaItem,
 } from "@/lib/media"
 import { cn } from "@/lib/utils"
-import { useAiConfig } from "@/lib/ai"
 import { useItemStateMap } from "@/components/use-item-state"
 
-const SEARCH_DEBOUNCE_MS = 400
+const LIBRARY_TABS = [
+  "watchlist",
+  "watched",
+  "watching",
+  "schedule",
+  "collections",
+] as const
 
 // Sort order for the library list tabs (shared across the three tabs).
 type ListSort = "added" | "title" | "year"
@@ -76,29 +78,24 @@ const LIST_TABS = new Set(["watchlist", "watched", "watching"])
 
 export function AppShell() {
   const { isAuthenticated } = useConvexAuth()
-  const search = useAction(api.tmdb.search)
   const myItems = useQuery(api.items.listMine, isAuthenticated ? {} : "skip")
   const myCollections = useQuery(
     api.collections.listMine,
     isAuthenticated ? {} : "skip"
   )
   const stateByKey = useItemStateMap(isAuthenticated)
-
-  const [query, setQuery] = useState("")
-  const [tab, setTab] = useState("watchlist")
-  // Type filter chips over search results (client-side).
-  const [searchType, setSearchType] = useState<MediaTypeFilter>("all")
-  // Sort + type filter for the library list tabs (shared across tabs).
-  const [listSort, setListSort] = useState<ListSort>("added")
-  const [listType, setListType] = useState<MediaTypeFilter>("all")
-  // AI describe mode replaces the search bar and tab area. Hidden entirely
-  // until the user configures an LLM key (header popover → AI settings).
-  const [aiMode, setAiMode] = useState(false)
-  const aiConfigured = useAiConfig() !== null
-  // Which collection the Collections tab is showing (null = cards view;
-  // reset whenever the tab changes so re-entering shows the cards again).
-  const [selectedCollectionId, setSelectedCollectionId] =
-    useState<Id<"collections"> | null>(null)
+  const searchParams = useSearchParams()
+  const tab =
+    LIBRARY_TABS.find((value) => value === searchParams.get("tab")) ??
+    "watchlist"
+  const typeParam = searchParams.get("type")
+  const listType: MediaTypeFilter =
+    typeParam === "movie" || typeParam === "tv" ? typeParam : "all"
+  const sortParam = searchParams.get("sort")
+  const listSort: ListSort =
+    sortParam === "title" || sortParam === "year" ? sortParam : "added"
+  const filter = searchParams.get("filter") ?? ""
+  const selectedCollectionId = searchParams.get("collection")
   const [createOpen, setCreateOpen] = useState(false)
   // Kebab actions on collection cards.
   const [renameTarget, setRenameTarget] = useState<{
@@ -112,79 +109,28 @@ export function AppShell() {
   } | null>(null)
   // Key of the card whose overlay is persistently open (one at a time).
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null)
-  // Results/error are tagged with the query they belong to, so "searching"
-  // is derived instead of tracked — stale responses simply never match.
-  const [results, setResults] = useState<{
-    query: string
-    items: MediaItem[]
-    page: number
-    hasMore: boolean
-  } | null>(null)
-  const [errorQuery, setErrorQuery] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
-  // Guards against out-of-order responses from overlapping searches.
-  const requestIdRef = useRef(0)
 
-  const trimmedQuery = query.trim()
-  const searchActive = trimmedQuery !== ""
-
-  useEffect(() => {
-    const requestId = ++requestIdRef.current
-    if (!searchActive || !isAuthenticated) {
-      return
-    }
-    const timeout = setTimeout(async () => {
-      try {
-        const { items, hasMore } = await search({ query: trimmedQuery })
-        if (requestIdRef.current === requestId) {
-          setResults({ query: trimmedQuery, items, page: 1, hasMore })
-        }
-      } catch {
-        if (requestIdRef.current === requestId) {
-          setErrorQuery(trimmedQuery)
-        }
+  // Native history keeps these local controls in the current entry, so
+  // returning from /search restores the list without a server navigation.
+  function updateListParams(
+    updates: Partial<
+      Record<"tab" | "type" | "sort" | "filter" | "collection", string | null>
+    >
+  ) {
+    const url = new URL(window.location.href)
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null || value === "") {
+        url.searchParams.delete(key)
+      } else {
+        url.searchParams.set(key, value)
       }
-    }, SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(timeout)
-  }, [trimmedQuery, searchActive, isAuthenticated, search])
-
-  // Appends the next TMDB page to the current results. Failures keep the
-  // grid and button intact so the user can simply try again.
-  const loadMore = async () => {
-    if (results === null || !results.hasMore || loadingMore) {
-      return
     }
-    const requestId = requestIdRef.current
-    const nextPage = results.page + 1
-    setLoadingMore(true)
-    try {
-      const { items, hasMore } = await search({
-        query: results.query,
-        page: nextPage,
-      })
-      if (requestIdRef.current === requestId) {
-        setResults((prev) => {
-          if (prev === null || prev.query !== results.query) {
-            return prev
-          }
-          // TMDB pages can shift between requests; drop duplicate titles.
-          const seen = new Set(prev.items.map(mediaKey))
-          return {
-            ...prev,
-            items: [
-              ...prev.items,
-              ...items.filter((item) => !seen.has(mediaKey(item))),
-            ],
-            page: nextPage,
-            hasMore,
-          }
-        })
-      }
-    } catch {
-      // Ignored — see comment above.
-    } finally {
-      setLoadingMore(false)
-    }
+    window.history.replaceState(
+      null,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    )
+    setActiveCardKey(null)
   }
 
   const watchlistItems = useMemo(
@@ -216,46 +162,14 @@ export function AppShell() {
       [...(myCollections ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
     [myCollections]
   )
+  // Never cast a URL value to a Convex ID: only a loaded, owned collection
+  // may provide the ID used by CollectionGrid's query.
   const selectedCollection =
-    collections.find((c) => c._id === selectedCollectionId) ?? null
-
-  const currentResults =
-    results !== null && results.query === trimmedQuery ? results : null
-  const typeFilteredResults =
-    currentResults === null
-      ? null
-      : {
-          ...currentResults,
-          items: currentResults.items.filter(
-            (item) => searchType === "all" || item.mediaType === searchType
-          ),
-        }
-  const currentError = errorQuery === trimmedQuery
-  const searching = searchActive && currentResults === null && !currentError
-
-  // Titles already in the user's lists matching the query — shown as a row
-  // above the TMDB results so a search also surfaces what you already track.
-  const libraryMatches = useMemo(() => {
-    if (!searchActive || myItems === undefined) {
-      return []
-    }
-    const q = trimmedQuery.toLowerCase()
-    return myItems.filter((item) => item.title.toLowerCase().includes(q))
-  }, [searchActive, myItems, trimmedQuery])
-
-  const renderLibraryCard = (item: MediaItem) => {
-    const key = mediaKey(item)
-    return (
-      <ShowCard
-        item={item}
-        state={stateByKey.get(key)}
-        stateByKey={stateByKey}
-        collections={collections}
-        overlayOpen={activeCardKey === key}
-        onOverlayOpenChange={(open) => setActiveCardKey(open ? key : null)}
-      />
-    )
-  }
+    tab === "collections"
+      ? (collections.find((c) => c._id === selectedCollectionId) ?? null)
+      : null
+  const canFilter = LIST_TABS.has(tab) || selectedCollection !== null
+  const clearFilter = () => updateListParams({ filter: null })
 
   const gridProps = {
     stateByKey,
@@ -264,211 +178,163 @@ export function AppShell() {
     onActiveCardKeyChange: setActiveCardKey,
   }
 
-  // Empty text: the tab's own message unless the type filter hid everything.
-  const emptyMessageFor = (base: string, items: MediaItem[]) =>
-    listType === "all" || items.length === 0
+  const emptyMessageFor = (base: string, items: MediaItem[]) => {
+    if (filter.trim()) {
+      return `No titles match "${filter.trim()}" in this list${listType === "all" ? "" : ` with the ${listType === "movie" ? "Movies" : "TV Shows"} filter`}. Try another title or clear the filter.`
+    }
+    return listType === "all" || items.length === 0
       ? base
       : `No ${listType === "movie" ? "movies" : "shows"} in this list.`
+  }
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
-      {aiMode && aiConfigured ? (
-        <div className="mx-auto w-full max-w-2xl">
-          <AiDescribe gridState={gridProps} onExit={() => setAiMode(false)} />
-        </div>
-      ) : (
-        <>
-          <Tabs
-            value={tab}
-            onValueChange={(value) => {
-              setTab(String(value))
-              setActiveCardKey(null)
-              // Leaving/re-entering Collections always lands on the cards view.
-              setSelectedCollectionId(null)
-              // Clicking a tab doubles as the way out of an active search.
-              setQuery("")
-            }}
-          >
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-4">
-              <div className="relative w-full max-w-xs self-center sm:max-w-sm lg:ml-auto lg:w-64">
-                <HugeiconsIcon
-                  icon={Search01Icon}
-                  className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                />
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          // Leaving/re-entering Collections lands on the cards view.
+          updateListParams({ tab: String(value), collection: null })
+        }}
+      >
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-4">
+          <div className="hide-scrollbar -mx-6 overflow-x-auto px-6 py-1 lg:mx-0 lg:overflow-visible lg:px-0 lg:py-0">
+            <TabsList>
+              <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
+              <TabsTrigger value="watched">Watched</TabsTrigger>
+              <TabsTrigger value="watching">Watching</TabsTrigger>
+              <TabsTrigger value="schedule">Schedule</TabsTrigger>
+              <TabsTrigger value="collections">Collections</TabsTrigger>
+            </TabsList>
+          </div>
+          {canFilter && (
+            <div className="flex w-full flex-col gap-2 lg:ml-auto lg:max-w-xs">
+              <label htmlFor="list-filter" className="text-sm font-medium">
+                Filter this list
+              </label>
+              <div className="flex items-center gap-2">
                 <Input
-                  type="search"
-                  placeholder="Search…"
-                  className="pr-11 pl-9"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value)
-                    setActiveCardKey(null)
-                  }}
-                  aria-label="Search movies and shows"
+                  id="list-filter"
+                  type="text"
+                  placeholder="Filter by title"
+                  value={filter}
+                  onChange={(event) =>
+                    updateListParams({ filter: event.target.value })
+                  }
                 />
-                {aiConfigured && (
-                  <Button
-                    variant={aiMode ? "default" : "secondary"}
-                    size="icon-sm"
-                    className="absolute top-1/2 right-1.5 -translate-y-1/2"
-                    aria-pressed={aiMode}
-                    aria-label="Describe what you want to watch instead"
-                    onClick={() => setAiMode(true)}
-                  >
-                    <HugeiconsIcon icon={AiMagicIcon} />
+                {filter !== "" && (
+                  <Button variant="ghost" size="sm" onClick={clearFilter}>
+                    Clear
                   </Button>
                 )}
               </div>
-              {!searchActive && (
-                <div className="hide-scrollbar -mx-6 overflow-x-auto px-6 py-1 lg:order-first lg:mx-0 lg:overflow-visible lg:px-0 lg:py-0">
-                  <TabsList>
-                    <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
-                    <TabsTrigger value="watched">Watched</TabsTrigger>
-                    <TabsTrigger value="watching">Watching</TabsTrigger>
-                    <TabsTrigger value="schedule">Schedule</TabsTrigger>
-                    <TabsTrigger value="collections">Collections</TabsTrigger>
-                  </TabsList>
-                </div>
-              )}
             </div>
-            {searchActive ? (
-              <div className="mt-8">
-                {libraryMatches.length > 0 && (
-                  <div className="mb-8">
-                    <MediaRow
-                      title="In your library"
-                      items={libraryMatches}
-                      loading={false}
-                      renderCard={renderLibraryCard}
-                    />
-                  </div>
-                )}
-                <div className="mb-6 flex justify-center">
-                  <MediaTypeToggle
-                    value={searchType}
-                    onChange={setSearchType}
-                  />
-                </div>
-                <SearchResults
-                  results={typeFilteredResults?.items ?? null}
-                  searching={searching}
-                  error={currentError}
-                  query={trimmedQuery}
-                  hasMore={currentResults?.hasMore ?? false}
-                  loadingMore={loadingMore}
-                  onLoadMore={loadMore}
-                  {...gridProps}
-                />
-              </div>
-            ) : (
-              <>
-                {LIST_TABS.has(tab) && (
-                  <div className="mt-4 flex flex-wrap items-center justify-start gap-2">
-                    <MediaTypeToggle value={listType} onChange={setListType} />
-                    <Select
-                      items={LIST_SORT_ITEMS}
-                      value={listSort}
-                      onValueChange={(value) => setListSort(value as ListSort)}
-                    >
-                      <SelectTrigger className="w-44" aria-label="Sort order">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {LIST_SORT_ITEMS.map((item) => (
-                          <SelectItem key={item.value} value={item.value}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <TabsContent value="watchlist" className="mt-6">
-                  <CardGrid
-                    items={applyListControls(
-                      watchlistItems,
-                      listType,
-                      listSort
-                    )}
-                    loading={myItems === undefined}
-                    emptyMessage={emptyMessageFor(
-                      "Nothing on your watchlist yet — search for something you want to watch.",
-                      watchlistItems
-                    )}
-                    {...gridProps}
-                  />
-                </TabsContent>
-                <TabsContent value="watched" className="mt-6">
-                  <CardGrid
-                    items={applyListControls(watchedItems, listType, listSort)}
-                    loading={myItems === undefined}
-                    emptyMessage={emptyMessageFor(
-                      "Nothing marked as watched yet — toggle Watched on any card.",
-                      watchedItems
-                    )}
-                    {...gridProps}
-                  />
-                </TabsContent>
-                <TabsContent value="watching" className="mt-6">
-                  <CardGrid
-                    items={applyListControls(watchingItems, listType, listSort)}
-                    loading={myItems === undefined}
-                    emptyMessage={emptyMessageFor(
-                      "Nothing in progress yet — toggle Watching on any card.",
-                      watchingItems
-                    )}
-                    {...gridProps}
-                  />
-                </TabsContent>
-                <TabsContent value="schedule" className="mt-6">
-                  <ScheduleTab
-                    isAuthenticated={isAuthenticated}
-                    myItems={myItems}
-                  />
-                </TabsContent>
-                <TabsContent value="collections" className="mt-6">
-                  {selectedCollection === null ? (
-                    <CollectionCards
-                      collections={collections}
-                      loading={myCollections === undefined}
-                      onOpen={setSelectedCollectionId}
-                      onCreate={() => setCreateOpen(true)}
-                      onRename={(id, name) => setRenameTarget({ id, name })}
-                      onDelete={(id, name, itemCount) =>
-                        setDeleteTarget({ id, name, itemCount })
-                      }
-                    />
-                  ) : (
-                    <>
-                      <div className="mb-4 flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="-ml-2 shrink-0"
-                          onClick={() => setSelectedCollectionId(null)}
-                        >
-                          <HugeiconsIcon icon={ArrowLeft01Icon} />
-                          Back
-                        </Button>
-                        <h2 className="min-w-0 truncate text-sm font-medium">
-                          {selectedCollection.name}
-                        </h2>
-                        <span className="shrink-0 text-sm text-muted-foreground">
-                          {formatItemCount(selectedCollection.itemCount)}
-                        </span>
-                      </div>
-                      <CollectionGrid
-                        collectionId={selectedCollection._id}
-                        {...gridProps}
-                      />
-                    </>
-                  )}
-                </TabsContent>
-              </>
+          )}
+        </div>
+        {LIST_TABS.has(tab) && (
+          <div className="mt-4 flex flex-wrap items-center justify-start gap-2">
+            <MediaTypeToggle
+              value={listType}
+              onChange={(type) => updateListParams({ type })}
+            />
+            <Select
+              items={LIST_SORT_ITEMS}
+              value={listSort}
+              onValueChange={(value) => updateListParams({ sort: value })}
+            >
+              <SelectTrigger className="w-44" aria-label="Sort order">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LIST_SORT_ITEMS.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <TabsContent value="watchlist" className="mt-6">
+          <CardGrid
+            items={applyListControls(
+              watchlistItems,
+              listType,
+              listSort,
+              filter
             )}
-          </Tabs>
-        </>
-      )}
+            loading={myItems === undefined}
+            emptyMessage={emptyMessageFor(
+              "Nothing on your watchlist yet — use the navbar search to find something you want to watch.",
+              watchlistItems
+            )}
+            {...gridProps}
+          />
+        </TabsContent>
+        <TabsContent value="watched" className="mt-6">
+          <CardGrid
+            items={applyListControls(watchedItems, listType, listSort, filter)}
+            loading={myItems === undefined}
+            emptyMessage={emptyMessageFor(
+              "Nothing marked as watched yet — toggle Watched on any card.",
+              watchedItems
+            )}
+            {...gridProps}
+          />
+        </TabsContent>
+        <TabsContent value="watching" className="mt-6">
+          <CardGrid
+            items={applyListControls(watchingItems, listType, listSort, filter)}
+            loading={myItems === undefined}
+            emptyMessage={emptyMessageFor(
+              "Nothing in progress yet — toggle Watching on any card.",
+              watchingItems
+            )}
+            {...gridProps}
+          />
+        </TabsContent>
+        <TabsContent value="schedule" className="mt-6">
+          <ScheduleTab isAuthenticated={isAuthenticated} myItems={myItems} />
+        </TabsContent>
+        <TabsContent value="collections" className="mt-6">
+          {selectedCollection === null ? (
+            <CollectionCards
+              collections={collections}
+              loading={myCollections === undefined}
+              onOpen={(collection) => updateListParams({ collection })}
+              onCreate={() => setCreateOpen(true)}
+              onRename={(id, name) => setRenameTarget({ id, name })}
+              onDelete={(id, name, itemCount) =>
+                setDeleteTarget({ id, name, itemCount })
+              }
+            />
+          ) : (
+            <>
+              <div className="mb-4 flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2 shrink-0"
+                  onClick={() => updateListParams({ collection: null })}
+                >
+                  <HugeiconsIcon icon={ArrowLeft01Icon} />
+                  Back
+                </Button>
+                <h2 className="min-w-0 truncate text-sm font-medium">
+                  {selectedCollection.name}
+                </h2>
+                <span className="shrink-0 text-sm text-muted-foreground">
+                  {formatItemCount(selectedCollection.itemCount)}
+                </span>
+              </div>
+              <CollectionGrid
+                collectionId={selectedCollection._id}
+                filter={filter}
+                {...gridProps}
+              />
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <CreateCollectionDialog open={createOpen} onOpenChange={setCreateOpen} />
       <RenameCollectionDialog
@@ -516,10 +382,15 @@ function sortByAddedAt<T extends { _creationTime: number }>(
 function applyListControls<T extends MediaItem>(
   items: T[],
   type: MediaTypeFilter,
-  sort: ListSort
+  sort: ListSort,
+  filter: string
 ): T[] {
-  const filtered =
-    type === "all" ? items : items.filter((i) => i.mediaType === type)
+  const titleFilter = filter.trim().toLowerCase()
+  const filtered = items.filter(
+    (item) =>
+      (type === "all" || item.mediaType === type) &&
+      item.title.toLowerCase().includes(titleFilter)
+  )
   if (sort === "added") {
     return filtered
   }
@@ -595,9 +466,11 @@ function CardGrid({
 
 function CollectionGrid({
   collectionId,
+  filter,
   ...gridProps
 }: {
   collectionId: Id<"collections">
+  filter: string
 } & GridStateProps) {
   const { isAuthenticated } = useConvexAuth()
   const items = useQuery(
@@ -606,9 +479,13 @@ function CollectionGrid({
   )
   return (
     <CardGrid
-      items={items ?? []}
+      items={applyListControls(items ?? [], "all", "added", filter)}
       loading={items === undefined}
-      emptyMessage="This collection is empty — use a card's Collections button to add titles."
+      emptyMessage={
+        filter.trim()
+          ? `No titles match "${filter.trim()}" in this collection. Try another title or clear the filter.`
+          : "This collection is empty — use a card's Collections button to add titles."
+      }
       {...gridProps}
     />
   )
@@ -793,54 +670,5 @@ function MosaicTile({
         </div>
       )}
     </div>
-  )
-}
-
-function SearchResults({
-  results,
-  searching,
-  error,
-  query,
-  hasMore,
-  loadingMore,
-  onLoadMore,
-  ...gridProps
-}: {
-  results: MediaItem[] | null
-  searching: boolean
-  error: boolean
-  query: string
-  hasMore: boolean
-  loadingMore: boolean
-  onLoadMore: () => void
-} & GridStateProps) {
-  if (searching) {
-    return <GridSkeleton />
-  }
-  if (error) {
-    return (
-      <p className="py-16 text-center text-sm text-muted-foreground">
-        Something went wrong searching. Try again.
-      </p>
-    )
-  }
-  if (results === null) {
-    return null
-  }
-  return (
-    <>
-      <CardGrid
-        items={results}
-        emptyMessage={`No movies or shows found for "${query}".`}
-        {...gridProps}
-      />
-      {results.length > 0 && hasMore && (
-        <div className="mt-8 flex justify-center">
-          <Button variant="outline" onClick={onLoadMore} disabled={loadingMore}>
-            {loadingMore ? "Loading..." : "Load more"}
-          </Button>
-        </div>
-      )}
-    </>
   )
 }

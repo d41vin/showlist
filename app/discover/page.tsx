@@ -1,10 +1,9 @@
 "use client"
 
-import { Search01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
 import { Show, SignInButton, SignUpButton } from "@clerk/nextjs"
 import { useAction, useConvexAuth } from "convex/react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 
 import { AiForYou } from "@/components/ai-for-you"
 import { DiscoverHero } from "@/components/discover-hero"
@@ -16,7 +15,6 @@ import {
   useItemStateMap,
   type CardGridState,
 } from "@/components/use-item-state"
-import { Input } from "@/components/ui/input"
 import { MediaRow } from "@/components/media-row"
 import {
   MediaTypeToggle,
@@ -35,7 +33,7 @@ import { api } from "@/convex/_generated/api"
 import { useAiConfig } from "@/lib/ai"
 import { mediaKey, type MediaItem } from "@/lib/media"
 
-const SEARCH_DEBOUNCE_MS = 400
+type DiscoverSort = "popularity" | "rating" | "newest"
 
 type RowData = {
   title: string
@@ -99,7 +97,15 @@ export default function DiscoverPage() {
         </main>
       </Show>
       <Show when="signed-in">
-        <DiscoverContent />
+        <Suspense
+          fallback={
+            <p className="px-6 py-8 text-sm text-muted-foreground">
+              Loading discover...
+            </p>
+          }
+        >
+          <DiscoverContent />
+        </Suspense>
       </Show>
     </>
   )
@@ -113,7 +119,6 @@ function DiscoverContent() {
   const discoverNowPlaying = useAction(api.tmdb.discoverNowPlaying)
   const discoverByFilters = useAction(api.tmdb.discover)
   const genresAction = useAction(api.tmdb.genres)
-  const search = useAction(api.tmdb.search)
 
   // Card state so discovery results carry the full action overlay.
   const stateByKey = useItemStateMap(isAuthenticated)
@@ -140,78 +145,87 @@ function DiscoverContent() {
     )
   }
 
-  const [query, setQuery] = useState("")
-  const [mediaType, setMediaType] = useState<MediaTypeFilter>("all")
-  const [rows, setRows] = useState<RowData[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const searchParams = useSearchParams()
+  const typeParam = searchParams.get("type")
+  const mediaType: MediaTypeFilter =
+    typeParam === "movie" || typeParam === "tv" ? typeParam : "all"
+  const sortParam = searchParams.get("sort")
+  const sortBy: DiscoverSort =
+    sortParam === "rating" || sortParam === "newest" ? sortParam : "popularity"
+  const requestedGenre = searchParams.get("genre") || null
+  const [curatedAttempt, setCuratedAttempt] = useState(0)
+  const curatedKey = `${mediaType}:${curatedAttempt}`
+  const [curatedStore, setCuratedStore] = useState<{
+    key: string
+    rows: RowData[]
+    error: boolean
+  } | null>(null)
+  const currentCurated =
+    isAuthenticated && curatedStore?.key === curatedKey ? curatedStore : null
+  const rows = currentCurated?.rows ?? []
+  const loading = currentCurated === null
+  const error = currentCurated?.error ?? false
 
-  // Search state
-  const [searchResults, setSearchResults] = useState<MediaItem[] | null>(null)
-  const [searchError, setSearchError] = useState(false)
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [searchType, setSearchType] = useState<MediaTypeFilter>("all")
-
-  // Browse-by-genre state (null genre = curated rows mode). Results are
-  // stored keyed by their filter combo so changing filters derives the
-  // loading state instead of resetting it in an effect. With type "all" a
-  // picked genre runs both per-type discover queries into one grid.
-  const [genreName, setGenreName] = useState<string | null>(null)
-  const [sortBy, setSortBy] = useState<"popularity" | "rating" | "newest">(
-    "popularity"
+  // Results and genre options are keyed by their controls so stale data
+  // cannot flash while URL state is restored or the selected type changes.
+  const [genreAttempt, setGenreAttempt] = useState(0)
+  const genreKey = `${mediaType}:${genreAttempt}`
+  const [genreStore, setGenreStore] = useState<{
+    key: string
+    options: GenreOption[]
+    error: boolean
+  } | null>(null)
+  const currentGenres =
+    isAuthenticated && genreStore?.key === genreKey ? genreStore : null
+  const genreOptions = useMemo(
+    () => currentGenres?.options ?? [],
+    [currentGenres]
   )
-  const [genreOptions, setGenreOptions] = useState<GenreOption[]>([])
+  const genreError = currentGenres?.error ?? false
+  const genreName =
+    currentGenres !== null && !genreError
+      ? (genreOptions.find((option) => option.value === requestedGenre)
+          ?.value ?? null)
+      : requestedGenre
   const [browseStore, setBrowseStore] = useState<BrowseStore | null>(null)
   const [browseFailed, setBrowseFailed] = useState<string | null>(null)
-  const [loadingMoreBrowse, setLoadingMoreBrowse] = useState(false)
-  const requestIdRef = useRef(0)
-  const discoverRequestIdRef = useRef(0)
+  const [loadingMoreRequest, setLoadingMoreRequest] = useState<{
+    key: string
+    id: number
+  } | null>(null)
+  const browseRequestIdRef = useRef(0)
 
-  const trimmedQuery = query.trim()
-  const searchActive = trimmedQuery !== ""
+  function updateDiscoverParams(
+    updates: Partial<Record<"type" | "genre" | "sort", string | null>>
+  ) {
+    const url = new URL(window.location.href)
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null || value === "") {
+        url.searchParams.delete(key)
+      } else {
+        url.searchParams.set(key, value)
+      }
+    }
+    window.history.replaceState(
+      null,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    )
+    setActiveCardKey(null)
+    setLoadingMoreRequest(null)
+  }
+
   // AI features stay hidden until the user has configured a key — the
   // header popover's AI settings entry is the only always-visible door.
   const aiConfigured = useAiConfig() !== null
 
-  // Debounced search
+  // Load the existing curated shelves; cleanup discards late responses on
+  // type changes, auth loss, retry, and navigation away from this page.
   useEffect(() => {
-    const requestId = ++requestIdRef.current
-    if (!searchActive) {
-      const timeout = setTimeout(() => {
-        setSearchResults(null)
-        setSearchError(false)
-        setSearchLoading(false)
-      }, 0)
-      return () => clearTimeout(timeout)
-    }
-    const timeout = setTimeout(async () => {
-      setSearchLoading(true)
-      setSearchError(false)
-      try {
-        const { items } = await search({ query: trimmedQuery })
-        if (requestIdRef.current === requestId) {
-          setSearchResults(items)
-          setSearchLoading(false)
-        }
-      } catch {
-        if (requestIdRef.current === requestId) {
-          setSearchError(true)
-          setSearchLoading(false)
-        }
-      }
-    }, SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(timeout)
-  }, [trimmedQuery, searchActive, search])
-
-  // Discovery data fetching: every shelf loads at once so the page reads
-  // like Netflix home — billboard, then stacked sections.
-  useEffect(() => {
-    if (searchActive) return
-    const requestId = ++discoverRequestIdRef.current
+    if (!isAuthenticated) return
+    let cancelled = false
 
     const fetchRows = async () => {
-      setLoading(true)
-      setError(false)
       const newRows: RowData[] = []
 
       try {
@@ -220,11 +234,13 @@ function DiscoverContent() {
           items: await discoverTrending({ mediaType }),
           ranked: true,
         })
+        if (cancelled) return
         const types: ("movie" | "tv")[] =
           mediaType === "all" ? ["movie", "tv"] : [mediaType]
         const popular = await Promise.all(
           types.map((type) => discoverPopular({ mediaType: type }))
         )
+        if (cancelled) return
         popular.forEach((items, i) =>
           newRows.push({
             title: types[i] === "movie" ? "Popular Movies" : "Popular TV",
@@ -234,6 +250,7 @@ function DiscoverContent() {
         const top = await Promise.all(
           types.map((type) => discoverTopRated({ mediaType: type }))
         )
+        if (cancelled) return
         top.forEach((items, i) =>
           newRows.push({
             title: types[i] === "movie" ? "Top Rated Movies" : "Top Rated TV",
@@ -250,21 +267,25 @@ function DiscoverContent() {
           })
         )
       } catch {
-        if (discoverRequestIdRef.current === requestId) {
-          setError(true)
+        if (!cancelled) {
+          setCuratedStore({ key: curatedKey, rows: newRows, error: true })
         }
+        return
       }
 
-      if (discoverRequestIdRef.current === requestId) {
-        setRows(newRows)
-        setLoading(false)
+      if (!cancelled) {
+        setCuratedStore({ key: curatedKey, rows: newRows, error: false })
       }
     }
 
     void fetchRows()
+    return () => {
+      cancelled = true
+    }
   }, [
+    isAuthenticated,
     mediaType,
-    searchActive,
+    curatedKey,
     discoverTrending,
     discoverPopular,
     discoverTopRated,
@@ -272,13 +293,21 @@ function DiscoverContent() {
   ])
 
   const browseKey =
-    genreName === null || searchActive
-      ? null
-      : `${mediaType}:${genreName}:${sortBy}`
+    genreName === null ? null : `${mediaType}:${genreName}:${sortBy}`
   const currentBrowse =
-    browseStore !== null && browseStore.key === browseKey ? browseStore : null
+    isAuthenticated && browseStore !== null && browseStore.key === browseKey
+      ? browseStore
+      : null
   const browseLoading =
     browseKey !== null && currentBrowse === null && browseFailed !== browseKey
+  const loadingMoreBrowse = loadingMoreRequest?.key === browseKey
+
+  // Pagination must also ignore results after a filter/auth change or unmount.
+  useEffect(() => {
+    return () => {
+      browseRequestIdRef.current += 1
+    }
+  }, [browseKey, isAuthenticated])
 
   // The grid's items: interleaved movie+TV in merged mode, the single type's
   // list otherwise.
@@ -301,6 +330,7 @@ function DiscoverContent() {
   // Genre options for the selected type; "all" merges both TMDB genre lists
   // by name so one browse grid can interleave the two discover queries.
   useEffect(() => {
+    if (!isAuthenticated) return
     let cancelled = false
     const load = async () => {
       try {
@@ -332,24 +362,30 @@ function DiscoverContent() {
             }
           }
           if (!cancelled) {
-            setGenreOptions([...byName.values()])
+            setGenreStore({
+              key: genreKey,
+              options: [...byName.values()],
+              error: false,
+            })
           }
         } else {
           const list = await genresAction({ mediaType })
           if (!cancelled) {
-            setGenreOptions(
-              list.map((g) => ({
+            setGenreStore({
+              key: genreKey,
+              options: list.map((g) => ({
                 value: g.name,
                 label: g.name,
                 movieId: mediaType === "movie" ? g.id : null,
                 tvId: mediaType === "tv" ? g.id : null,
-              }))
-            )
+              })),
+              error: false,
+            })
           }
         }
       } catch {
         if (!cancelled) {
-          setGenreOptions([])
+          setGenreStore({ key: genreKey, options: [], error: true })
         }
       }
     }
@@ -357,10 +393,11 @@ function DiscoverContent() {
     return () => {
       cancelled = true
     }
-  }, [mediaType, genresAction])
+  }, [isAuthenticated, mediaType, genreKey, genresAction])
 
   useEffect(() => {
     if (
+      !isAuthenticated ||
       browseKey === null ||
       browseStore?.key === browseKey ||
       browseFailed === browseKey
@@ -420,12 +457,13 @@ function DiscoverContent() {
     genreName,
     genreOptions,
     sortBy,
-    searchActive,
+    isAuthenticated,
     discoverByFilters,
   ])
 
   const loadMoreBrowse = async () => {
     if (
+      !isAuthenticated ||
       browseKey === null ||
       currentBrowse === null ||
       loadingMoreBrowse ||
@@ -448,7 +486,8 @@ function DiscoverContent() {
     if (extendTypes.length === 0) {
       return
     }
-    setLoadingMoreBrowse(true)
+    const requestId = ++browseRequestIdRef.current
+    setLoadingMoreRequest({ key: browseKey, id: requestId })
     try {
       const lists: BrowseStore["lists"] = { ...currentBrowse.lists }
       for (const type of extendTypes) {
@@ -463,6 +502,7 @@ function DiscoverContent() {
           sort: sortBy,
           page: state.page + 1,
         })
+        if (browseRequestIdRef.current !== requestId) return
         const seen = new Set(state.items.map(mediaKey))
         lists[type] = {
           items: [
@@ -473,20 +513,17 @@ function DiscoverContent() {
           hasMore: result.hasMore,
         }
       }
-      setBrowseStore({ key: browseKey, lists })
+      if (browseRequestIdRef.current === requestId) {
+        setBrowseStore({ key: browseKey, lists })
+      }
     } catch {
       // Keep the grid; the button stays for a retry.
     } finally {
-      setLoadingMoreBrowse(false)
+      setLoadingMoreRequest((current) =>
+        current?.id === requestId ? null : current
+      )
     }
   }
-
-  const typeFilteredResults =
-    searchResults === null
-      ? null
-      : searchResults.filter(
-          (item) => searchType === "all" || item.mediaType === searchType
-        )
 
   const genreSelectItems = [
     { value: "all", label: "All genres" },
@@ -502,242 +539,186 @@ function DiscoverContent() {
     "grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
 
   const heroItems =
-    !searchActive && !loading && !error && genreName === null
+    !loading && !error && genreName === null
       ? (rows[0]?.items ?? []).slice(0, 5)
       : []
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
-      {/* Search bar */}
-      <div className="relative mx-auto w-full max-w-xl">
-        <HugeiconsIcon
-          icon={Search01Icon}
-          className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          type="search"
-          placeholder="Search movies and shows..."
-          className="pl-9"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search movies and shows"
-        />
-      </div>
-
-      <div className="mt-8">
-        {searchActive ? (
-          /* Search results */
-          <>
-            <div className="mb-6 flex justify-center">
-              <MediaTypeToggle value={searchType} onChange={setSearchType} />
-            </div>
-            {searchLoading ? (
-              <div className={GRID_CLASS}>
-                {Array.from({ length: 12 }, (_, i) => (
-                  <div key={i} className="flex flex-col gap-1.5">
-                    <Skeleton className="aspect-2/3 w-full rounded-lg" />
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                ))}
+      {heroItems.length > 0 && (
+        <div className="mb-8">
+          {/* Billboard strip: the top five trending titles as
+              full-width hero pages — swipe on touch, chevrons on
+              desktop, snap-locked. */}
+          <RailScroller
+            className="snap-x snap-mandatory"
+            autoAdvanceMs={8000}
+            paged
+          >
+            {heroItems.map((item, index) => (
+              <div
+                key={`${item.mediaType}:${item.tmdbId}`}
+                className="w-full shrink-0 snap-start"
+              >
+                <DiscoverHero
+                  item={item}
+                  gridState={gridState}
+                  priority={index === 0}
+                />
               </div>
-            ) : searchError ? (
-              <p className="py-16 text-center text-sm text-muted-foreground">
-                Something went wrong searching. Try again.
-              </p>
-            ) : typeFilteredResults !== null &&
-              typeFilteredResults.length > 0 ? (
+            ))}
+          </RailScroller>
+        </div>
+      )}
+
+      {isAuthenticated && <ProviderRail gridState={gridState} />}
+
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+        <MediaTypeToggle
+          value={mediaType}
+          onChange={(next) => {
+            // Genre ids differ between movies and TV.
+            updateDiscoverParams({ type: next, genre: null })
+          }}
+        />
+        <Select
+          items={genreSelectItems}
+          value={
+            currentGenres === null || genreError ? "all" : (genreName ?? "all")
+          }
+          disabled={currentGenres === null || genreError}
+          onValueChange={(value) => {
+            const v = String(value)
+            // In merged ("all") mode the grid interleaves both types'
+            // queries for the picked genre — no auto-flip to Movies.
+            updateDiscoverParams({ genre: v === "all" ? null : v })
+          }}
+        >
+          <SelectTrigger className="w-44" aria-label="Genre">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {genreSelectItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {genreName !== null && (
+          <Select
+            items={sortSelectItems}
+            value={sortBy}
+            onValueChange={(value) => updateDiscoverParams({ sort: value })}
+          >
+            <SelectTrigger className="w-40" aria-label="Sort by">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {sortSelectItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+      {genreError && (
+        <div className="mt-6 flex flex-col items-center gap-3 text-sm text-muted-foreground">
+          <p>Something went wrong loading genres.</p>
+          <Button
+            variant="outline"
+            disabled={!isAuthenticated}
+            onClick={() => setGenreAttempt((attempt) => attempt + 1)}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+
+      <div className="mt-6 flex flex-col gap-8">
+        {isAuthenticated &&
+          aiConfigured &&
+          !error &&
+          !loading &&
+          genreName === null && <AiForYou isAuthenticated={isAuthenticated} />}
+        {genreName !== null ? (
+          genreError ? null : browseFailed === browseKey ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
+              <p>Something went wrong loading results.</p>
+              <Button
+                variant="outline"
+                disabled={!isAuthenticated}
+                onClick={() => setBrowseFailed(null)}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : browseLoading ? (
+            <div className={GRID_CLASS}>
+              {Array.from({ length: 12 }, (_, i) => (
+                <div key={i} className="flex flex-col gap-1.5">
+                  <Skeleton className="aspect-2/3 w-full rounded-lg" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : browseItems !== null && browseItems.length > 0 ? (
+            <>
               <div className={GRID_CLASS}>
-                {typeFilteredResults.map((item) => (
+                {browseItems.map((item) => (
                   <div key={`${item.mediaType}:${item.tmdbId}`}>
                     {renderCard(item)}
                   </div>
                 ))}
               </div>
-            ) : typeFilteredResults !== null &&
-              searchResults !== null &&
-              searchResults.length > 0 ? (
-              <p className="py-16 text-center text-sm text-muted-foreground">
-                No {searchType === "movie" ? "movies" : "shows"} matched &quot;
-                {trimmedQuery}&quot;.
-              </p>
-            ) : searchResults !== null ? (
-              <p className="py-16 text-center text-sm text-muted-foreground">
-                No movies or shows found for &quot;{trimmedQuery}&quot;.
-              </p>
-            ) : null}
+              {browseHasMore && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => void loadMoreBrowse()}
+                    disabled={loadingMoreBrowse}
+                  >
+                    {loadingMoreBrowse ? "Loading..." : "Load more"}
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : browseItems !== null ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">
+              Nothing found for that genre and sort — try another combination.
+            </p>
+          ) : null
+        ) : error ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
+            <p>Something went wrong loading results.</p>
+            <Button
+              variant="outline"
+              disabled={!isAuthenticated}
+              onClick={() => setCuratedAttempt((attempt) => attempt + 1)}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : loading ? (
+          <>
+            <MediaRow title="" items={[]} loading renderCard={() => null} />
+            <MediaRow title="" items={[]} loading renderCard={() => null} />
+            <MediaRow title="" items={[]} loading renderCard={() => null} />
           </>
         ) : (
-          <>
-            {heroItems.length > 0 && (
-              <div className="mb-8">
-                {/* Billboard strip: the top five trending titles as
-                    full-width hero pages — swipe on touch, chevrons on
-                    desktop, snap-locked. */}
-                <RailScroller
-                  className="snap-x snap-mandatory"
-                  autoAdvanceMs={8000}
-                  paged
-                >
-                  {heroItems.map((item, index) => (
-                    <div
-                      key={`${item.mediaType}:${item.tmdbId}`}
-                      className="w-full shrink-0 snap-start"
-                    >
-                      <DiscoverHero
-                        item={item}
-                        gridState={gridState}
-                        priority={index === 0}
-                      />
-                    </div>
-                  ))}
-                </RailScroller>
-              </div>
-            )}
-
-            <ProviderRail gridState={gridState} />
-
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-              <MediaTypeToggle
-                value={mediaType}
-                onChange={(next) => {
-                  // Genre ids differ between movies and TV.
-                  setGenreName(null)
-                  setMediaType(next)
-                }}
-              />
-              <Select
-                items={genreSelectItems}
-                value={genreName === null ? "all" : genreName}
-                onValueChange={(value) => {
-                  const v = String(value)
-                  // In merged ("all") mode the grid interleaves both types'
-                  // queries for the picked genre — no auto-flip to Movies.
-                  setGenreName(v === "all" ? null : v)
-                }}
-              >
-                <SelectTrigger className="w-44" aria-label="Genre">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {genreSelectItems.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {genreName !== null && (
-                <Select
-                  items={sortSelectItems}
-                  value={sortBy}
-                  onValueChange={(value) =>
-                    setSortBy(value as "popularity" | "rating" | "newest")
-                  }
-                >
-                  <SelectTrigger className="w-40" aria-label="Sort by">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sortSelectItems.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            <div className="mt-6 flex flex-col gap-8">
-              {isAuthenticated &&
-                aiConfigured &&
-                !error &&
-                !loading &&
-                genreName === null && (
-                  <AiForYou isAuthenticated={isAuthenticated} />
-                )}
-              {genreName !== null ? (
-                browseFailed === browseKey ? (
-                  <p className="py-16 text-center text-sm text-muted-foreground">
-                    Something went wrong loading results. Try again.
-                  </p>
-                ) : browseLoading ? (
-                  <div className={GRID_CLASS}>
-                    {Array.from({ length: 12 }, (_, i) => (
-                      <div key={i} className="flex flex-col gap-1.5">
-                        <Skeleton className="aspect-2/3 w-full rounded-lg" />
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-3 w-1/2" />
-                      </div>
-                    ))}
-                  </div>
-                ) : browseItems !== null && browseItems.length > 0 ? (
-                  <>
-                    <div className={GRID_CLASS}>
-                      {browseItems.map((item) => (
-                        <div key={`${item.mediaType}:${item.tmdbId}`}>
-                          {renderCard(item)}
-                        </div>
-                      ))}
-                    </div>
-                    {browseHasMore && (
-                      <div className="flex justify-center">
-                        <Button
-                          variant="outline"
-                          onClick={() => void loadMoreBrowse()}
-                          disabled={loadingMoreBrowse}
-                        >
-                          {loadingMoreBrowse ? "Loading..." : "Load more"}
-                        </Button>
-                      </div>
-                    )}
-                  </>
-                ) : browseItems !== null ? (
-                  <p className="py-16 text-center text-sm text-muted-foreground">
-                    Nothing found for that genre and sort — try another
-                    combination.
-                  </p>
-                ) : null
-              ) : error ? (
-                <p className="py-16 text-center text-sm text-muted-foreground">
-                  Something went wrong loading results. Try again.
-                </p>
-              ) : loading ? (
-                <>
-                  <MediaRow
-                    title=""
-                    items={[]}
-                    loading
-                    renderCard={() => null}
-                  />
-                  <MediaRow
-                    title=""
-                    items={[]}
-                    loading
-                    renderCard={() => null}
-                  />
-                  <MediaRow
-                    title=""
-                    items={[]}
-                    loading
-                    renderCard={() => null}
-                  />
-                </>
-              ) : (
-                rows.map((row) => (
-                  <MediaRow
-                    key={row.title}
-                    title={row.title}
-                    items={row.items}
-                    loading={loading}
-                    renderCard={renderCard}
-                    ranked={row.ranked === true}
-                  />
-                ))
-              )}
-            </div>
-          </>
+          rows.map((row) => (
+            <MediaRow
+              key={row.title}
+              title={row.title}
+              items={row.items}
+              loading={loading}
+              renderCard={renderCard}
+              ranked={row.ranked === true}
+            />
+          ))
         )}
       </div>
     </main>
