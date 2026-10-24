@@ -156,6 +156,138 @@ test("upstream errors remain retryable failures", async () => {
   ).rejects.toThrow("503")
 })
 
+test("sorted search orders a deduplicated multi-page pool", async () => {
+  const pages = [
+    [
+      {
+        id: 1,
+        media_type: "movie",
+        title: "Alpha",
+        release_date: "2020-01-01",
+        popularity: 10,
+      },
+      {
+        id: 1,
+        media_type: "movie",
+        title: "Alpha",
+        release_date: "2020-01-01",
+        popularity: 10,
+      },
+    ],
+    [
+      {
+        id: 2,
+        media_type: "tv",
+        name: "Beta",
+        first_air_date: "2019-05-01",
+        popularity: 30,
+      },
+    ],
+    [
+      {
+        id: 3,
+        media_type: "movie",
+        title: "Gamma",
+        release_date: "2021-01-01",
+        popularity: 20,
+      },
+    ],
+  ]
+  fetchMock.mockImplementation(async (input) => {
+    const page = Number(new URL(String(input)).searchParams.get("page"))
+    return new Response(
+      JSON.stringify({ results: pages[page - 1], total_pages: 3 }),
+      { status: 200 }
+    )
+  })
+  const data = await setup().action(api.tmdb.search, {
+    query: "a",
+    sort: "popularity",
+  })
+  expect(data.hasMore).toBe(false)
+  expect(data.items.map((item) => item.title)).toEqual([
+    "Beta",
+    "Gamma",
+    "Alpha",
+  ])
+  expect(fetchMock).toHaveBeenCalledTimes(3)
+})
+
+test("sorted search applies field direction and keeps unknown dates and ratings last", async () => {
+  const rows = [
+    {
+      id: 1,
+      media_type: "movie",
+      title: "Zulu",
+      release_date: "2020-01-01",
+      popularity: 5,
+      vote_average: 8,
+      vote_count: 5,
+    },
+    {
+      id: 2,
+      media_type: "movie",
+      title: "Alpha",
+      release_date: "2010-01-01",
+      popularity: 50,
+      vote_average: 7,
+      vote_count: 8,
+    },
+    {
+      id: 3,
+      media_type: "movie",
+      title: "Mike",
+      release_date: "2024-01-01",
+      popularity: 90,
+      vote_average: 9,
+      vote_count: 2,
+    },
+    { id: 4, media_type: "movie", title: "Delta", popularity: 10 },
+  ]
+  const ordered = async (
+    sort: "title" | "popularity" | "newest" | "rating",
+    order: "asc" | "desc"
+  ) => {
+    response(rows, 1)
+    const data = await setup().action(api.tmdb.search, {
+      query: "a",
+      sort,
+      order,
+    })
+    return data.items.map((item) => item.title)
+  }
+  expect(await ordered("title", "asc")).toEqual([
+    "Alpha",
+    "Delta",
+    "Mike",
+    "Zulu",
+  ])
+  expect(await ordered("title", "desc")).toEqual([
+    "Zulu",
+    "Mike",
+    "Delta",
+    "Alpha",
+  ])
+  expect(await ordered("popularity", "desc")).toEqual([
+    "Mike",
+    "Alpha",
+    "Delta",
+    "Zulu",
+  ])
+  expect(await ordered("newest", "asc")).toEqual([
+    "Alpha",
+    "Zulu",
+    "Mike",
+    "Delta",
+  ])
+  expect(await ordered("rating", "desc")).toEqual([
+    "Mike",
+    "Zulu",
+    "Alpha",
+    "Delta",
+  ])
+})
+
 const titleArgs = { mediaType: "movie", tmdbId: 22 } as const
 const titleKey = "title:movie:22:v1"
 const detailsKey = "details:movie:22:v2"

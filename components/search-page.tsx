@@ -3,7 +3,12 @@
 import { useConvexAuth, useQuery } from "convex/react"
 import { useSearchParams } from "next/navigation"
 import { useState } from "react"
-import { AiMagicIcon, Cancel01Icon } from "@hugeicons/core-free-icons"
+import {
+  AiMagicIcon,
+  ArrowDown01Icon,
+  ArrowUp01Icon,
+  Cancel01Icon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { AiDescribe } from "@/components/ai-describe"
 import { useNavigationState } from "@/components/navigation-state"
@@ -29,15 +34,43 @@ import { clearEntitySearch, readEntitySearch } from "@/lib/entity-search"
 import { mediaKey, type MediaItem } from "@/lib/media"
 import { replaceSearchUrl } from "@/lib/navigation"
 import {
+  defaultSortOrder,
   savedLabels,
   searchLibrary,
+  type EntitySort,
   type SearchSort,
   type SearchStatus,
   type SearchSentiment,
+  type SortOrder,
+  type TitleSort,
 } from "@/lib/search"
+import { cn } from "@/lib/utils"
 
 const GRID_CLASS =
   "grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+
+const TEXT_SORTS: { value: TitleSort; label: string }[] = [
+  { value: "relevance", label: "Best match" },
+  { value: "popularity", label: "Popularity" },
+  { value: "newest", label: "Release date" },
+  { value: "rating", label: "Rating" },
+  { value: "title", label: "Title" },
+]
+
+const ENTITY_SORTS: { value: EntitySort; label: string }[] = [
+  { value: "popularity", label: "Popularity" },
+  { value: "newest", label: "Release date" },
+]
+
+const SORT_LABELS: Record<SearchSort, string> = {
+  relevance: "best match",
+  popularity: "popularity",
+  newest: "release date",
+  rating: "rating",
+  title: "title",
+  year: "release year",
+  added: "recent activity",
+}
 
 export function SearchPageContent() {
   const params = useSearchParams()
@@ -46,6 +79,7 @@ export function SearchPageContent() {
   const stateByKey = useItemStateMap(isAuthenticated)
   const collections = useCollectionSummaries(isAuthenticated)
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const { results, recent, removeRecent, rememberSearch } = useNavigationState()
   const gridState: CardGridState = {
     stateByKey,
@@ -58,7 +92,6 @@ export function SearchPageContent() {
   const hasEntityParams = ["entity", "id", "name", "credit"].some(
     (key) => params.get(key) !== null
   )
-  const invalidEntity = hasEntityParams && !entity
   const entityLabel = entity
     ? entity.kind === "person"
       ? entity.credit === "crew"
@@ -71,6 +104,8 @@ export function SearchPageContent() {
   const type = typeParam === "movie" || typeParam === "tv" ? typeParam : "all"
   const scope =
     !hasEntityParams && params.get("scope") === "library" ? "library" : "all"
+  const invalidEntity =
+    hasEntityParams && (!entity || (entity.kind === "genre" && type === "all"))
   const statusParam = params.get("status")
   const status: SearchStatus =
     statusParam === "watchlist" ||
@@ -87,11 +122,29 @@ export function SearchPageContent() {
       : "all"
   const collection = params.get("collection") ?? "all"
   const sortParam = params.get("sort")
-  const sort: SearchSort =
+  const librarySort: SearchSort =
     sortParam === "title" || sortParam === "year" || sortParam === "added"
       ? sortParam
       : "relevance"
-  const entitySort = sortParam === "newest" ? "newest" : "popularity"
+  const entitySort: EntitySort =
+    sortParam === "newest" ? "newest" : "popularity"
+  const textSort: TitleSort =
+    sortParam === "popularity" ||
+    sortParam === "newest" ||
+    sortParam === "rating" ||
+    sortParam === "title"
+      ? sortParam
+      : "relevance"
+  const activeSort: SearchSort = entity
+    ? entitySort
+    : scope === "library"
+      ? librarySort
+      : textSort
+  const orderParam = params.get("order")
+  const order: SortOrder =
+    orderParam === "asc" || orderParam === "desc"
+      ? orderParam
+      : defaultSortOrder(activeSort)
   const describe =
     !hasEntityParams && params.get("mode") === "describe" && aiConfigured
   const library = hasEntityParams
@@ -99,26 +152,37 @@ export function SearchPageContent() {
     : searchLibrary(items ?? [], stateByKey, {
         query,
         type,
-        ...(scope === "library" ? { status, sentiment, collection, sort } : {}),
+        ...(scope === "library"
+          ? { status, sentiment, collection, sort: librarySort, order }
+          : {}),
       })
-  const libraryKeys = new Set(library.map(mediaKey))
-  const catalogue = entity
-    ? results.items
-    : results.items.filter((item) => !libraryKeys.has(mediaKey(item)))
+  const searchResults = results.items
+  const sortOptions: { value: string; label: string }[] = entity
+    ? ENTITY_SORTS
+    : scope === "library"
+      ? [
+          { value: "relevance", label: "Best match" },
+          { value: "title", label: "Title" },
+          { value: "year", label: "Release year" },
+          {
+            value: "added",
+            label: status === "all" ? "Recently saved" : "Recently marked",
+          },
+        ]
+      : TEXT_SORTS
   const hasFilters =
     !!entity ||
     type !== "all" ||
+    sortParam !== null ||
+    orderParam !== null ||
     (scope === "library" &&
-      (status !== "all" ||
-        sentiment !== "all" ||
-        collection !== "all" ||
-        sort !== "relevance"))
+      (status !== "all" || sentiment !== "all" || collection !== "all"))
 
   const removeEntity = () => {
     const next = new URLSearchParams(params.toString())
     clearEntitySearch(next)
-    if (sortParam === "newest" || sortParam === "popularity")
-      next.delete("sort")
+    next.delete("sort")
+    next.delete("order")
     next.delete("mode")
     replaceSearchUrl(next)
     setActiveCardKey(null)
@@ -134,6 +198,18 @@ export function SearchPageContent() {
     replaceSearchUrl(next)
     setActiveCardKey(null)
   }
+
+  const changeSort = (value: string) => {
+    const fallback = entity ? "popularity" : "relevance"
+    update({ sort: value === fallback ? null : value, order: null })
+  }
+
+  const toggleOrder = () => {
+    const next: SortOrder = order === "asc" ? "desc" : "asc"
+    update({ order: next === defaultSortOrder(activeSort) ? null : next })
+  }
+
+  const orderLabel = order === "asc" ? "ascending" : "descending"
 
   const grid = (titles: MediaItem[]) => (
     <div className={GRID_CLASS}>
@@ -200,8 +276,8 @@ export function SearchPageContent() {
         <div role="alert" className="flex flex-col items-start gap-3 py-6">
           <p>This search filter is invalid or incomplete.</p>
           <p className="text-sm text-muted-foreground">
-            Clear it to search titles again. Genre filters require a movie or TV
-            type in the link.
+            Clear it to search titles again. Genre filters require a movie or
+            series type in the link.
           </p>
           <Button variant="outline" onClick={removeEntity}>
             Clear invalid filter
@@ -214,16 +290,16 @@ export function SearchPageContent() {
         />
       ) : (
         <>
-          <div className="mt-4 flex flex-wrap items-center gap-4">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {!entity && (
               <div
                 role="group"
                 aria-label="Search scope"
-                className="flex gap-1.5"
+                className="flex items-center gap-1 rounded-full bg-muted p-1"
               >
                 <Button
                   size="sm"
-                  variant={scope === "all" ? "default" : "secondary"}
+                  variant={scope === "all" ? "default" : "ghost"}
                   aria-pressed={scope === "all"}
                   onClick={() =>
                     update({
@@ -232,6 +308,7 @@ export function SearchPageContent() {
                       sentiment: null,
                       collection: null,
                       sort: null,
+                      order: null,
                     })
                   }
                 >
@@ -239,48 +316,74 @@ export function SearchPageContent() {
                 </Button>
                 <Button
                   size="sm"
-                  variant={scope === "library" ? "default" : "secondary"}
+                  variant={scope === "library" ? "default" : "ghost"}
                   aria-pressed={scope === "library"}
-                  onClick={() => update({ scope: "library" })}
+                  onClick={() =>
+                    update({
+                      scope: "library",
+                      sort: null,
+                      order: null,
+                    })
+                  }
                 >
                   My library
                 </Button>
               </div>
             )}
             {entity?.kind === "genre" ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled
-                aria-describedby="genre-type-help"
+              <div
+                role="group"
+                aria-label="Media type"
+                className="flex items-center gap-1 rounded-full bg-muted p-1"
               >
-                {type === "movie" ? "Movies" : "TV"}
-              </Button>
+                <Button
+                  size="sm"
+                  variant="default"
+                  disabled
+                  aria-describedby="genre-type-help"
+                >
+                  {type === "movie" ? "Movies" : "Series"}
+                </Button>
+              </div>
             ) : (
               <MediaTypeToggle
                 value={type}
                 onChange={(value) => update({ type: value })}
               />
             )}
-            {entity && (
+            <div className="flex items-center gap-1.5">
               <SearchFilter
-                label="Sort catalogue results"
-                value={entitySort}
-                onChange={(value) => update({ sort: value })}
-                options={[
-                  { value: "popularity", label: "Popularity" },
-                  { value: "newest", label: "Newest" },
-                ]}
+                label={
+                  scope === "library" && !entity
+                    ? "Sort library results"
+                    : "Sort search results"
+                }
+                value={activeSort}
+                onChange={changeSort}
+                options={sortOptions}
               />
-            )}
+              {activeSort !== "relevance" && (
+                <Button
+                  size="icon-sm"
+                  variant="secondary"
+                  aria-label={`Sort ${orderLabel}; switch to ${order === "asc" ? "descending" : "ascending"}`}
+                  aria-pressed={order === "desc"}
+                  onClick={toggleOrder}
+                >
+                  <HugeiconsIcon
+                    icon={order === "asc" ? ArrowUp01Icon : ArrowDown01Icon}
+                  />
+                </Button>
+              )}
+            </div>
           </div>
           {entity?.kind === "genre" && (
             <p
               id="genre-type-help"
               className="mt-3 text-sm text-muted-foreground"
             >
-              Genres are specific to movies or TV. Remove the genre filter to
-              change the media type.
+              Genres are specific to movies or series. Remove the genre filter
+              to change the media type.
             </p>
           )}
           {scope === "library" && (
@@ -323,29 +426,18 @@ export function SearchPageContent() {
                     : []),
                 ]}
               />
-              <SearchFilter
-                label="Sort library results"
-                value={sort}
-                onChange={(value) => update({ sort: value })}
-                options={[
-                  { value: "relevance", label: "Best match" },
-                  { value: "title", label: "Title A–Z" },
-                  { value: "year", label: "Newest year" },
-                  {
-                    value: "added",
-                    label:
-                      status === "all" ? "Recently saved" : "Recently marked",
-                  },
-                ]}
-              />
             </div>
           )}
           <div className="my-6 flex flex-wrap items-center justify-between gap-2">
             <p role="status" className="text-sm text-muted-foreground">
               {entity
-                ? `Catalogue results are ordered by ${entitySort === "newest" ? "newest release" : "popularity"}. Saved titles are included.`
+                ? `Search results ordered by ${SORT_LABELS[activeSort]} (${orderLabel}).`
                 : scope === "all"
-                  ? "Catalogue results are ordered by best match. Saved titles appear first."
+                  ? query.trim()
+                    ? activeSort === "relevance"
+                      ? "Search results are ordered by best match."
+                      : `Search results ordered by ${SORT_LABELS[activeSort]} (${orderLabel}).`
+                    : "Search movies and series, or browse your saved titles."
                   : items === undefined
                     ? "Loading your library…"
                     : `${library.length} ${library.length === 1 ? "title" : "titles"} in your library${query.trim() ? ` matching “${query.trim()}”` : ""}.`}
@@ -363,6 +455,7 @@ export function SearchPageContent() {
                         sentiment: null,
                         collection: null,
                         sort: null,
+                        order: null,
                       })
                 }
               >
@@ -427,24 +520,43 @@ export function SearchPageContent() {
             <div className="space-y-8">
               {library.length > 0 && (
                 <section aria-labelledby="library-search-heading">
-                  <h2
-                    id="library-search-heading"
-                    className="mb-4 text-lg font-medium"
+                  <button
+                    type="button"
+                    aria-expanded={libraryOpen}
+                    aria-controls="library-search-results"
+                    onClick={() => setLibraryOpen((open) => !open)}
+                    className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/60 px-4 py-3 text-left"
                   >
-                    In your library{" "}
-                    <span className="text-sm text-muted-foreground">
-                      ({library.length})
+                    <span
+                      id="library-search-heading"
+                      className="text-lg font-medium"
+                    >
+                      In your library{" "}
+                      <span className="text-sm text-muted-foreground">
+                        ({library.length})
+                      </span>
                     </span>
-                  </h2>
-                  {grid(library)}
+                    <HugeiconsIcon
+                      icon={ArrowDown01Icon}
+                      className={cn(
+                        "size-4 shrink-0 text-muted-foreground transition-transform",
+                        libraryOpen && "rotate-180"
+                      )}
+                    />
+                  </button>
+                  {libraryOpen && (
+                    <div id="library-search-results" className="mt-4">
+                      {grid(library)}
+                    </div>
+                  )}
                 </section>
               )}
-              <section aria-labelledby="catalogue-search-heading">
+              <section aria-labelledby="search-results-heading">
                 <h2
-                  id="catalogue-search-heading"
+                  id="search-results-heading"
                   className="mb-4 text-lg font-medium"
                 >
-                  Catalogue
+                  Search results
                 </h2>
                 {!isAuthenticated || results.loading ? (
                   <SearchSkeleton />
@@ -456,7 +568,7 @@ export function SearchPageContent() {
                     <p>
                       {entity
                         ? "Couldn’t load titles for this filter."
-                        : "Couldn’t search the catalogue."}
+                        : "Couldn’t search for titles."}
                     </p>
                     <Button variant="outline" onClick={results.retry}>
                       Retry search
@@ -464,8 +576,8 @@ export function SearchPageContent() {
                   </div>
                 ) : (
                   <>
-                    {catalogue.length ? (
-                      grid(catalogue)
+                    {searchResults.length ? (
+                      grid(searchResults)
                     ) : (
                       <p className="py-8 text-center text-muted-foreground">
                         {entity
@@ -474,9 +586,7 @@ export function SearchPageContent() {
                             : entity.kind === "genre"
                               ? "No titles found for this genre. Remove the filter to search by title."
                               : "No titles found for this filter and media type. Try another type or remove the filter."
-                          : library.length
-                            ? "Matching titles on this page are already shown in your library."
-                            : "No matching titles on this page. Try another title or media type."}
+                          : "No matching titles. Try another title or media type."}
                       </p>
                     )}
                     {results.moreError && (

@@ -5,7 +5,13 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "@/convex/_generated/api"
 import type { EntitySearch } from "@/lib/entity-search"
 import type { MediaItem } from "@/lib/media"
-import { uniqueMedia, type SearchType } from "@/lib/search"
+import {
+  uniqueMedia,
+  type EntitySort,
+  type SearchType,
+  type SortOrder,
+  type TitleSort,
+} from "@/lib/search"
 
 type Result = {
   key: string
@@ -20,7 +26,9 @@ export function useTitleSearch(
   type: SearchType,
   enabled: boolean,
   entity?: EntitySearch | null,
-  entitySort: "popularity" | "newest" = "popularity"
+  entitySort: EntitySort = "popularity",
+  textSort: TitleSort = "relevance",
+  order: SortOrder = "desc"
 ) {
   const search = useAction(api.tmdb.search)
   const searchEntity = useAction(api.tmdb.entitySearch)
@@ -30,8 +38,8 @@ export function useTitleSearch(
   const trimmed = entity ? "" : query.trim().slice(0, 200)
   const key = JSON.stringify(
     kind
-      ? ["entity", kind, entityId, credit, type, entitySort]
-      : [trimmed, type]
+      ? ["entity", kind, entityId, credit, type, entitySort, order]
+      : [trimmed, type, textSort, order]
   )
   const active =
     enabled && (!!kind || !!trimmed) && !(kind === "genre" && type === "all")
@@ -45,14 +53,27 @@ export function useTitleSearch(
             mediaType: type,
             ...(credit ? { credit } : {}),
             sort: entitySort,
+            order,
             page,
           })
         : search({
             query: trimmed,
             mediaType: type === "all" ? undefined : type,
+            ...(textSort === "relevance" ? {} : { sort: textSort, order }),
             page,
           }),
-    [kind, entityId, type, credit, entitySort, trimmed, search, searchEntity]
+    [
+      kind,
+      entityId,
+      type,
+      credit,
+      entitySort,
+      textSort,
+      order,
+      trimmed,
+      search,
+      searchEntity,
+    ]
   )
   const [result, setResult] = useState<Result | null>(null)
   const [failure, setFailure] = useState<string | null>(null)

@@ -780,6 +780,35 @@ test.each(["movie", "tv"] as const)(
   }
 )
 
+test("entity discover honors ascending sort order", async () => {
+  respond({ results: [movie(1)], total_pages: 1 })
+  await setup().action(api.tmdb.entitySearch, {
+    kind: "company",
+    id: "7",
+    mediaType: "movie",
+    sort: "newest",
+    order: "asc",
+  })
+  expect(urls()[0].searchParams.get("sort_by")).toBe("primary_release_date.asc")
+})
+
+test("person credits sort oldest first when order is ascending", async () => {
+  respond({
+    id: 9,
+    cast: [
+      movie(1, { release_date: "2020-01-01", popularity: 1 }),
+      movie(2, { release_date: "1990-01-01", popularity: 2 }),
+    ],
+    crew: [],
+  })
+  const result = await setup().action(api.tmdb.entitySearch, {
+    ...entityArgs,
+    sort: "newest",
+    order: "asc",
+  })
+  expect(result.items.map((item) => item.tmdbId)).toEqual([2, 1])
+})
+
 test("all-type discover requests start in parallel and interleave filtered pages", async () => {
   let movieDone!: (response: Response) => void
   let tvDone!: (response: Response) => void

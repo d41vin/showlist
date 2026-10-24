@@ -20,6 +20,12 @@ import { api } from "@/convex/_generated/api"
 import { useAiConfig } from "@/lib/ai"
 import { readEntitySearch } from "@/lib/entity-search"
 import { mediaKey, type MediaItem, type MediaType } from "@/lib/media"
+import {
+  defaultSortOrder,
+  type EntitySort,
+  type SortOrder,
+  type TitleSort,
+} from "@/lib/search"
 
 type Origin = {
   href: string
@@ -258,6 +264,21 @@ export function NavigationProvider({
   const hasEntityParams = ["entity", "id", "name", "credit"].some((key) =>
     params.has(key)
   )
+  const sortParam = params.get("sort")
+  const entitySort: EntitySort =
+    sortParam === "newest" ? "newest" : "popularity"
+  const textSort: TitleSort =
+    sortParam === "popularity" ||
+    sortParam === "newest" ||
+    sortParam === "rating" ||
+    sortParam === "title"
+      ? sortParam
+      : "relevance"
+  const orderParam = params.get("order")
+  const order: SortOrder =
+    orderParam === "asc" || orderParam === "desc"
+      ? orderParam
+      : defaultSortOrder(entity ? entitySort : textSort)
   const results = useTitleSearch(
     query,
     typeParam === "movie" || typeParam === "tv" ? typeParam : "all",
@@ -267,7 +288,9 @@ export function NavigationProvider({
       (params.get("scope") !== "library" || entity !== null) &&
       !(params.get("mode") === "describe" && aiConfigured && !hasEntityParams),
     entity,
-    params.get("sort") === "newest" ? "newest" : "popularity"
+    entitySort,
+    textSort,
+    order
   )
   const storageKey = `showlist:searches:${user?.id ?? ""}`
   const stored = useSyncExternalStore(

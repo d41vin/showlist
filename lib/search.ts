@@ -3,8 +3,17 @@ import { mediaKey, type ItemState, type MediaItem } from "./media"
 
 export type SearchType = "all" | "movie" | "tv"
 export type SearchStatus = "all" | "watchlist" | "watching" | "watched"
-export type SearchSort = "relevance" | "title" | "year" | "added"
+export type SearchSort =
+  "relevance" | "popularity" | "newest" | "rating" | "title" | "year" | "added"
+export type SortOrder = "asc" | "desc"
+export type EntitySort = "popularity" | "newest"
+export type TitleSort =
+  "relevance" | "popularity" | "newest" | "rating" | "title"
 export type SearchSentiment = "all" | "liked" | "disliked" | "none"
+
+export function defaultSortOrder(sort: SearchSort | EntitySort | TitleSort) {
+  return sort === "title" ? "asc" : "desc"
+}
 
 export function normalizeSearch(value: string) {
   return value
@@ -44,6 +53,7 @@ export function searchLibrary(
     sentiment?: SearchSentiment
     collection?: string
     sort?: SearchSort
+    order?: SortOrder
   }
 ) {
   const {
@@ -53,6 +63,7 @@ export function searchLibrary(
     sentiment = "all",
     collection = "all",
     sort = "relevance",
+    order = defaultSortOrder(sort),
   } = filters
   const filtered = items.filter(
     (item) =>
@@ -77,15 +88,24 @@ export function searchLibrary(
         : status === "watched"
           ? item.watchedAt
           : undefined) ?? item._creationTime
+  const direction = order === "asc" ? 1 : -1
   return filtered.sort((a, b) => {
     const delta =
-      sort === "year"
-        ? (b.year ?? "").localeCompare(a.year ?? "")
-        : sort === "added"
-          ? addedAt(b) - addedAt(a)
-          : sort === "relevance"
-            ? relevance(a.title, query) - relevance(b.title, query)
-            : 0
+      sort === "title"
+        ? a.title.localeCompare(b.title) * direction
+        : sort === "year"
+          ? a.year === null && b.year === null
+            ? 0
+            : a.year === null
+              ? 1
+              : b.year === null
+                ? -1
+                : a.year.localeCompare(b.year) * direction
+          : sort === "added"
+            ? (addedAt(a) - addedAt(b)) * direction
+            : sort === "relevance"
+              ? relevance(a.title, query) - relevance(b.title, query)
+              : 0
     return (
       delta ||
       a.title.localeCompare(b.title) ||

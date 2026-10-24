@@ -102,6 +102,49 @@ test("recently marked uses the selected status timestamp", () => {
     }).map((i) => i.tmdbId)
   ).toEqual([2, 1])
 })
+test("library sort direction flips field order but keeps missing values last", () => {
+  expect(
+    searchLibrary(titles, states, {
+      query: "",
+      type: "all",
+      sort: "title",
+      order: "asc",
+    }).map((i) => i.title)
+  ).toEqual(["Matrix", "Matrix Reloaded", "The Matrix"])
+  expect(
+    searchLibrary(titles, states, {
+      query: "",
+      type: "all",
+      sort: "title",
+      order: "desc",
+    }).map((i) => i.title)
+  ).toEqual(["The Matrix", "Matrix Reloaded", "Matrix"])
+  expect(
+    searchLibrary(titles, states, {
+      query: "",
+      type: "all",
+      sort: "year",
+      order: "asc",
+    }).map((i) => i.tmdbId)
+  ).toEqual([2, 1, 3])
+  expect(
+    searchLibrary(titles, states, {
+      query: "",
+      type: "all",
+      sort: "year",
+      order: "desc",
+    }).map((i) => i.tmdbId)
+  ).toEqual([1, 2, 3])
+  expect(
+    searchLibrary(titles, states, {
+      query: "",
+      type: "all",
+      status: "watched",
+      sort: "added",
+      order: "asc",
+    }).map((i) => i.tmdbId)
+  ).toEqual([1, 2])
+})
 test("year sorts missing years last without mutating source", () => {
   expect(
     searchLibrary(titles, states, { query: "", type: "all", sort: "year" }).map(

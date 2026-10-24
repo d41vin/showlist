@@ -276,11 +276,105 @@ function yearOf(date: unknown): string | null {
   return typeof date === "string" && date.length >= 4 ? date.slice(0, 4) : null
 }
 
+const searchSortValidator = v.union(
+  v.literal("relevance"),
+  v.literal("popularity"),
+  v.literal("newest"),
+  v.literal("rating"),
+  v.literal("title")
+)
+const sortOrderValidator = v.union(v.literal("asc"), v.literal("desc"))
+
+type SearchSort = Infer<typeof searchSortValidator>
+type SortOrder = Infer<typeof sortOrderValidator>
+type SearchRow = {
+  item: SearchResultPayload
+  popularity: number
+  rating: number
+  votes: number
+  date: string
+}
+
+function finiteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+function searchRows(
+  data: Record<string, unknown>,
+  selected?: MediaType
+): SearchRow[] {
+  const results = Array.isArray(data.results) ? data.results : []
+  const rows: SearchRow[] = []
+  for (const raw of results) {
+    if (raw === null || typeof raw !== "object") continue
+    const r = raw as Record<string, unknown>
+    const mediaType = selected ?? r.media_type
+    const title = mediaType === "movie" ? r.title : r.name
+    if (
+      (mediaType !== "movie" && mediaType !== "tv") ||
+      r.adult === true ||
+      !positiveId(r.id) ||
+      typeof title !== "string" ||
+      title.trim() === ""
+    )
+      continue
+    const date = dateOf(
+      mediaType === "movie" ? r.release_date : r.first_air_date
+    )
+    rows.push({
+      item: {
+        tmdbId: r.id,
+        mediaType,
+        title,
+        posterPath: typeof r.poster_path === "string" ? r.poster_path : null,
+        year: yearOf(mediaType === "movie" ? r.release_date : r.first_air_date),
+      },
+      popularity: finiteNumber(r.popularity),
+      rating: finiteNumber(r.vote_average),
+      votes: finiteNumber(r.vote_count),
+      date,
+    })
+  }
+  return rows
+}
+
+// Search endpoints cannot sort server-side. A sorted view gathers the first
+// few result pages and orders that pool locally, so the first 60 matches are
+// genuinely sorted instead of each page being shuffled in isolation.
+const SORTED_SEARCH_PAGES = 3
+
+function compareRows(
+  a: SearchRow,
+  b: SearchRow,
+  sort: Exclude<SearchSort, "relevance">,
+  order: SortOrder
+) {
+  const direction = order === "asc" ? 1 : -1
+  if (sort === "popularity") {
+    return (a.popularity - b.popularity) * direction
+  }
+  if (sort === "newest") {
+    if (!a.date && !b.date) return 0
+    if (!a.date) return 1
+    if (!b.date) return -1
+    return a.date.localeCompare(b.date) * direction
+  }
+  if (sort === "rating") {
+    if (a.rating === 0 && b.rating === 0) return 0
+    if (a.rating === 0) return 1
+    if (b.rating === 0) return -1
+    return (a.rating - b.rating) * direction || b.votes - a.votes
+  }
+  return a.item.title.localeCompare(b.item.title) * direction
+}
+
 export const search = action({
   args: {
     query: v.string(),
     page: v.optional(v.number()),
     mediaType: v.optional(mediaTypeValidator),
+    sort: v.optional(searchSortValidator),
+    order: v.optional(sortOrderValidator),
   },
   returns: v.object({
     items: v.array(searchResultValidator),
@@ -299,41 +393,56 @@ export const search = action({
       throw new Error("Invalid search page")
     }
     if (query === "") return { items: [], hasMore: false }
-    const data = await tmdbFetch(`/search/${args.mediaType ?? "multi"}`, {
+    const sort = args.sort ?? "relevance"
+    const order = args.order ?? (sort === "title" ? "asc" : "desc")
+    const path = `/search/${args.mediaType ?? "multi"}`
+    const params = {
       query,
       include_adult: "false",
       language: "en-US",
-      page: String(page),
-    })
-    const results = Array.isArray(data.results) ? data.results : []
-    const items: SearchResultPayload[] = []
-    const seen = new Set<string>()
-    for (const raw of results) {
-      if (raw === null || typeof raw !== "object") continue
-      const r = raw as Record<string, unknown>
-      const mediaType = args.mediaType ?? r.media_type
-      const title = mediaType === "movie" ? r.title : r.name
-      if (
-        (mediaType !== "movie" && mediaType !== "tv") ||
-        r.adult === true ||
-        typeof r.id !== "number" ||
-        !Number.isSafeInteger(r.id) ||
-        r.id <= 0 ||
-        typeof title !== "string" ||
-        title.trim() === ""
-      )
-        continue
-      const key = `${mediaType}:${r.id}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      items.push({
-        tmdbId: r.id,
-        mediaType,
-        title,
-        posterPath: typeof r.poster_path === "string" ? r.poster_path : null,
-        year: yearOf(mediaType === "movie" ? r.release_date : r.first_air_date),
-      })
     }
+
+    if (sort !== "relevance") {
+      const first = await tmdbFetch(path, { ...params, page: "1" })
+      const totalPages =
+        typeof first.total_pages === "number"
+          ? Math.min(Math.max(1, first.total_pages), 500)
+          : 1
+      const pageCount = Math.min(SORTED_SEARCH_PAGES, totalPages)
+      const rest = await Promise.all(
+        Array.from({ length: pageCount - 1 }, (_, i) =>
+          tmdbFetch(path, { ...params, page: String(i + 2) })
+        )
+      )
+      const seen = new Set<string>()
+      const rows = [first, ...rest]
+        .flatMap((data) => searchRows(data, args.mediaType))
+        .filter((row) => {
+          const key = `${row.item.mediaType}:${row.item.tmdbId}`
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+        .sort(
+          (a, b) =>
+            compareRows(a, b, sort, order) ||
+            b.popularity - a.popularity ||
+            a.item.mediaType.localeCompare(b.item.mediaType) ||
+            a.item.tmdbId - b.item.tmdbId
+        )
+      return { items: rows.map((row) => row.item), hasMore: false }
+    }
+
+    const data = await tmdbFetch(path, { ...params, page: String(page) })
+    const seen = new Set<string>()
+    const items = searchRows(data, args.mediaType)
+      .filter((row) => {
+        const key = `${row.item.mediaType}:${row.item.tmdbId}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .map((row) => row.item)
     const totalPages =
       typeof data.total_pages === "number"
         ? Math.min(data.total_pages, 500)
@@ -971,6 +1080,7 @@ export const entitySearch = action({
     mediaType: v.union(v.literal("all"), mediaTypeValidator),
     credit: v.optional(v.union(v.literal("cast"), v.literal("crew"))),
     sort: v.union(v.literal("popularity"), v.literal("newest")),
+    order: v.optional(sortOrderValidator),
     page: v.optional(v.number()),
   },
   returns: cataloguePageValidator,
@@ -991,6 +1101,7 @@ export const entitySearch = action({
     if (args.credit !== undefined && args.kind !== "person") {
       throw new Error("Credit filter requires a person")
     }
+    const order = args.order ?? "desc"
 
     if (args.kind === "person") {
       // TV discover does not support with_people/with_cast/with_crew. One
@@ -1040,11 +1151,20 @@ export const entitySearch = action({
           (args.mediaType === "all" || row.item.mediaType === args.mediaType) &&
           (args.credit === undefined || row[args.credit])
       )
+      const direction = order === "asc" ? 1 : -1
       selected.sort((a, b) => {
-        const newest = b.date.localeCompare(a.date)
-        const popular = b.popularity - a.popularity
+        const newest =
+          !a.date && !b.date
+            ? 0
+            : !a.date
+              ? 1
+              : !b.date
+                ? -1
+                : a.date.localeCompare(b.date) * direction
+        const popular = (a.popularity - b.popularity) * direction
         return (
           (args.sort === "newest" ? newest || popular : popular || newest) ||
+          b.popularity - a.popularity ||
           a.item.mediaType.localeCompare(b.item.mediaType) ||
           a.item.tmdbId - b.item.tmdbId
         )
@@ -1073,10 +1193,10 @@ export const entitySearch = action({
           page: String(page),
           sort_by:
             args.sort === "popularity"
-              ? "popularity.desc"
+              ? `popularity.${order}`
               : mediaType === "movie"
-                ? "primary_release_date.desc"
-                : "first_air_date.desc",
+                ? `primary_release_date.${order}`
+                : `first_air_date.${order}`,
           [filter]: id,
         })
         return cataloguePage(data, mediaType, page)

@@ -12,16 +12,20 @@ interface MediaTypeToggleProps {
 const options: { value: MediaTypeFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "movie", label: "Movies" },
-  { value: "tv", label: "TV" },
+  { value: "tv", label: "Series" },
 ]
 
 export function MediaTypeToggle({ value, onChange }: MediaTypeToggleProps) {
   return (
-    <div className="flex gap-1.5" role="group" aria-label="Media type">
+    <div
+      className="flex items-center gap-1 rounded-full bg-muted p-1"
+      role="group"
+      aria-label="Media type"
+    >
       {options.map((option) => (
         <Button
           key={option.value}
-          variant={value === option.value ? "default" : "secondary"}
+          variant={value === option.value ? "default" : "ghost"}
           size="sm"
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
