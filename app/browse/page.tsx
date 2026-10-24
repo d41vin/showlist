@@ -12,7 +12,7 @@ export default function Page() {
           <div className="flex max-w-md flex-col items-center gap-4 text-center">
             <h1 className="text-4xl font-semibold tracking-tight">ShowList</h1>
             <p className="text-muted-foreground">
-              A minimal tracker for movies and TV shows. Keep a watchlist, mark
+              A minimal tracker for movies and series. Keep a watchlist, mark
               what you&apos;ve watched, and organize everything into your own
               collections.
             </p>

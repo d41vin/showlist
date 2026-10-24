@@ -220,7 +220,7 @@ export async function aiRecommendJson(
 // --- Prompts -------------------------------------------------------------
 
 export const DESCRIBE_SYSTEM_PROMPT = [
-  "You suggest real movies and TV shows for a tracker app.",
+  "You suggest real movies and series for a tracker app.",
   "The user describes what they feel like watching (a vibe, a mashup, a mood).",
   "Return ONLY a JSON object:",
   '{"recommendations":[{"title":"string","year":number,"mediaType":"movie"|"tv","reason":"max 80 chars, why it matches"}]}',
@@ -229,7 +229,7 @@ export const DESCRIBE_SYSTEM_PROMPT = [
 ].join("\n")
 
 export const FOR_YOU_SYSTEM_PROMPT = [
-  "You are a movie/TV recommendation engine inside a personal tracker app.",
+  "You are a movie/series recommendation engine inside a personal tracker app.",
   "Based on the user's library, recommend 8-10 titles they are likely to enjoy.",
   "Return ONLY a JSON object:",
   '{"recommendations":[{"title":"string","mediaType":"movie"|"tv","reason":"max 90 chars, tie it to their taste"}]}',

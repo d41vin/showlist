@@ -180,7 +180,7 @@ export function AppShell() {
 
   const emptyMessageFor = (base: string, items: MediaItem[]) => {
     if (filter.trim()) {
-      return `No titles match "${filter.trim()}" in this list${listType === "all" ? "" : ` with the ${listType === "movie" ? "Movies" : "TV Shows"} filter`}. Try another title or clear the filter.`
+      return `No titles match "${filter.trim()}" in this list${listType === "all" ? "" : ` with the ${listType === "movie" ? "Movies" : "Series"} filter`}. Try another title or clear the filter.`
     }
     return listType === "all" || items.length === 0
       ? base

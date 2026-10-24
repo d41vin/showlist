@@ -159,8 +159,8 @@ export function ScheduleTab({
   if (myItems !== undefined && tvItems.length === 0) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
-        Nothing to schedule yet — add TV shows to any of your lists and their
-        next episodes will show up here.
+        Nothing to schedule yet — add series to any of your lists and their next
+        episodes will show up here.
       </p>
     )
   }
@@ -230,7 +230,7 @@ export function ScheduleTab({
         <p className="py-12 text-center text-sm text-muted-foreground">
           {isPastWeek
             ? "Nothing from your shows aired this week. Weeks further back can be incomplete — a show's full episode list lives in its details view."
-            : "Nothing airs this week from your shows. Episodes from every TV show in your library appear here — flip forward to see upcoming weeks."}
+            : "Nothing airs this week from your shows. Episodes from every series in your library appear here — flip forward to see upcoming weeks."}
         </p>
       ) : (
         groups.map((group) => (

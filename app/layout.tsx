@@ -13,11 +13,11 @@ import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: {
-    default: "ShowList — track movies & TV",
+    default: "ShowList — track movies & series",
     template: "%s · ShowList",
   },
   description:
-    "A minimal tracker for movies and TV shows. Keep a watchlist, tick episodes you've seen, and see what airs next.",
+    "A minimal tracker for movies and series. Keep a watchlist, tick episodes you've seen, and see what airs next.",
 }
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })

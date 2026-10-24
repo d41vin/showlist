@@ -13,7 +13,7 @@ export default function SearchPage() {
         <main className="mx-auto flex max-w-xl flex-col items-center gap-4 px-6 py-16 text-center">
           <h1 className="text-2xl font-semibold">Find your next watch</h1>
           <p className="text-muted-foreground">
-            Sign in to search movies, TV shows, and your library.
+            Sign in to search movies, series, and your library.
           </p>
           <SignInButton>
             <Button>Sign in</Button>

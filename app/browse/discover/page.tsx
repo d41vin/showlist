@@ -85,8 +85,8 @@ export default function DiscoverPage() {
           <div className="flex max-w-md flex-col items-center gap-4 text-center">
             <h1 className="text-4xl font-semibold tracking-tight">ShowList</h1>
             <p className="text-muted-foreground">
-              Sign in to discover trending movies and TV shows, search for
-              titles, and build your watchlist.
+              Sign in to discover trending movies and series, search for titles,
+              and build your watchlist.
             </p>
             <div className="flex items-center gap-2">
               <SignUpButton>
@@ -248,7 +248,7 @@ function DiscoverContent() {
         if (cancelled) return
         popular.forEach((items, i) =>
           newRows.push({
-            title: types[i] === "movie" ? "Popular Movies" : "Popular TV",
+            title: types[i] === "movie" ? "Popular Movies" : "Popular Series",
             items,
           })
         )
@@ -258,7 +258,8 @@ function DiscoverContent() {
         if (cancelled) return
         top.forEach((items, i) =>
           newRows.push({
-            title: types[i] === "movie" ? "Top Rated Movies" : "Top Rated TV",
+            title:
+              types[i] === "movie" ? "Top Rated Movies" : "Top Rated Series",
             items,
           })
         )

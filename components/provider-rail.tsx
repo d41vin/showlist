@@ -295,7 +295,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
                     : sort === "popularity"
                       ? "Popular"
                       : "Top-rated"
-                } ${railType === "movie" ? "movies" : "shows"} on this streaming service`}
+                } ${railType === "movie" ? "movies" : "series"} on this streaming service`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -322,7 +322,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
               size="sm"
               onClick={() => setRailType(t)}
             >
-              {t === "movie" ? "Movies" : "TV"}
+              {t === "movie" ? "Movies" : "Series"}
             </Button>
           ))}
         </div>
