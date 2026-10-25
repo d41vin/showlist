@@ -1,4 +1,11 @@
-@import "tailwindcss";
+/* Scope sources explicitly: auto-detection makes Turbopack's PostCSS worker spin. */
+@import "tailwindcss" source(none);
+@source "../app";
+@source "../components";
+@source "../convex";
+@source "../hooks";
+@source "../lib";
+
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@clerk/ui/themes/shadcn.css";
