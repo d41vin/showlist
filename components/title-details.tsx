@@ -13,11 +13,9 @@ import Image from "next/image"
 import Link from "next/link"
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react"
@@ -53,16 +51,14 @@ import {
 export type ShowDetails = FunctionReturnType<typeof api.tmdb.details>
 type Trailer = FunctionReturnType<typeof api.tmdb.videos>
 
-// Backdrops are 16:9; the hero crops them with `object-position` at 38% of
-// the overflow. The bleed layer below the hero re-renders the rows the crop
-// hides so the content section can appear to cover a continuing image.
-const BACKDROP_ASPECT = 16 / 9
-const HERO_CROP_Y = 0.38
-const BLEED_HEIGHT_RATIO = 0.28
-const BLEED_MASK =
-  "linear-gradient(to bottom, black 0%, black 45%, transparent 100%)"
-const GLASS_MASK =
-  "linear-gradient(to bottom, black 0%, black 55%, transparent 100%)"
+// The content sits on a frosted panel that starts 35px above its own edge, so
+// the last rows of hero artwork blur through it. The mask ramps to full
+// strength exactly at the hero boundary, holds, then fades out below the
+// artwork so the glass never terminates on a visible line.
+const HERO_BLEND_OVERLAP = 35
+const HERO_BLEND_HEIGHT = 215
+const HERO_BLEND_PEAK = (HERO_BLEND_OVERLAP / HERO_BLEND_HEIGHT) * 100
+const HERO_BLEND_MASK = `linear-gradient(to bottom, transparent 0%, black ${HERO_BLEND_PEAK.toFixed(1)}%, black ${(HERO_BLEND_PEAK + 10).toFixed(1)}%, transparent 100%)`
 type TitleDetailsProps = {
   item: MediaItem
   data: ShowDetails
@@ -119,20 +115,6 @@ function TitleDetailsContent({
   )
   const [extrasFailed, setExtrasFailed] = useState(false)
   const [playing, setPlaying] = useState(false)
-  const [heroSize, setHeroSize] = useState<{
-    width: number
-    height: number
-  } | null>(null)
-  const bleedRailRef = useRef<HTMLDivElement>(null)
-  const heroScrollRef = useRef(0)
-
-  const syncBleed = useCallback((scrollLeft: number) => {
-    heroScrollRef.current = scrollLeft
-    const rail = bleedRailRef.current
-    if (rail !== null) {
-      rail.style.transform = `translate3d(${-scrollLeft}px, 0, 0)`
-    }
-  }, [])
 
   if (playing && (!active || !isAuthenticated)) {
     setPlaying(false)
@@ -141,31 +123,6 @@ function TitleDetailsContent({
   useEffect(() => {
     if (active) titleRef.current?.focus({ preventScroll: true })
   }, [active])
-
-  useEffect(() => {
-    const el = heroRef.current
-    if (el === null) return
-    const update = () => {
-      const width = el.clientWidth
-      const height = el.clientHeight
-      if (width === 0 || height === 0) return
-      setHeroSize((current) =>
-        current?.width === width && current.height === height
-          ? current
-          : { width, height }
-      )
-    }
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    // ResizeObserver reports on the next rendered frame; resize fires
-    // immediately, so a viewport change never leaves the bleed misaligned.
-    window.addEventListener("resize", update)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener("resize", update)
-    }
-  }, [])
 
   useEffect(() => {
     if (!active || !isAuthenticated || recs !== null || recsFailed) return
@@ -251,30 +208,6 @@ function TitleDetailsContent({
       )
     ),
   ].slice(0, 10)
-  // The hero clip only reveals the top 38% of the image's vertical overflow;
-  // the rest is real artwork the content section can sit in front of.
-  const bleed = (() => {
-    if (!isDrawer || heroSize === null || backdrops.length === 0) return null
-    const renderedHeight = heroSize.width / BACKDROP_ASPECT
-    const overflow = renderedHeight - heroSize.height
-    if (overflow <= 1) return null
-    const remaining = overflow * (1 - HERO_CROP_Y)
-    const height = Math.min(
-      remaining,
-      Math.round(heroSize.height * BLEED_HEIGHT_RATIO)
-    )
-    if (height < 32) return null
-    const visibleTop = overflow * HERO_CROP_Y + heroSize.height
-    return {
-      width: heroSize.width,
-      height,
-      objectPosition: (visibleTop / (renderedHeight - height)) * 100,
-    }
-  })()
-
-  useLayoutEffect(() => {
-    syncBleed(heroScrollRef.current)
-  }, [syncBleed, bleed?.width, bleed?.height, playing])
 
   const OverviewHeading = isDrawer ? "h3" : "h2"
 
@@ -291,7 +224,6 @@ function TitleDetailsContent({
             <RailScroller
               paged
               autoAdvanceMs={active ? 8000 : undefined}
-              onRailScroll={isDrawer ? syncBleed : undefined}
               controlsInset
               paginationOverlay
               className="snap-x snap-mandatory gap-0 pb-0"
@@ -380,61 +312,17 @@ function TitleDetailsContent({
       </div>
 
       <div className={isDrawer ? "relative z-10" : undefined}>
-        {bleed !== null && !playing && (
-          <>
-            {/* The artwork rows the hero crop hides, painted below the hero
-                so the content section can sit in front of a continuing
-                image instead of a hard cut. Mirrored to the artwork rail. */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0 z-0 overflow-hidden"
-              style={{
-                height: bleed.height,
-                maskImage: BLEED_MASK,
-                WebkitMaskImage: BLEED_MASK,
-              }}
-            >
-              <div ref={bleedRailRef} className="flex">
-                {backdrops.map((path) => (
-                  <div
-                    key={path}
-                    className="relative shrink-0"
-                    style={{ width: bleed.width, height: bleed.height }}
-                  >
-                    <Image
-                      src={tmdbBackdropUrl(path, "w1280")}
-                      alt=""
-                      fill
-                      sizes={`${Math.round(bleed.width)}px`}
-                      loading="lazy"
-                      className="object-cover"
-                      style={{
-                        objectPosition: `50% ${bleed.objectPosition}%`,
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-            {data.logoPath && (
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 top-0 z-0 bg-gradient-to-b from-black/55 via-black/20 to-transparent"
-                style={{ height: bleed.height }}
-              />
-            )}
-            {/* Frosted layer the content sits on. It shares the hero
-                buttons' blur recipe and fades out so no strip edge shows. */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0 z-[1] bg-popover/50 backdrop-blur-2xl backdrop-saturate-150"
-              style={{
-                height: bleed.height,
-                maskImage: GLASS_MASK,
-                WebkitMaskImage: GLASS_MASK,
-              }}
-            />
-          </>
+        {isDrawer && backdrops.length > 0 && !playing && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 z-0 bg-popover/70 backdrop-blur-2xl backdrop-saturate-150"
+            style={{
+              top: -HERO_BLEND_OVERLAP,
+              height: HERO_BLEND_HEIGHT,
+              maskImage: HERO_BLEND_MASK,
+              WebkitMaskImage: HERO_BLEND_MASK,
+            }}
+          />
         )}
         <div className="relative z-10 mx-auto w-full max-w-2xl min-w-0 pb-6">
           <div className="flex flex-wrap items-center justify-center gap-1.5 px-6 pt-4">

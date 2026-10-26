@@ -43,10 +43,12 @@ function ScrollBar({
     <ScrollAreaPrimitive.Scrollbar
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
+      // Layers positioned inside the content raise themselves above this bar,
+      // so it needs its own z-index to stay visible and draggable.
       className={cn(
         "flex touch-none p-px select-none",
         orientation === "vertical" &&
-          "h-full w-2.5 border-l border-l-transparent",
+          "z-30 h-full w-2.5 border-l border-l-transparent",
         orientation === "horizontal" &&
           "h-2.5 flex-col border-t border-t-transparent",
         className
