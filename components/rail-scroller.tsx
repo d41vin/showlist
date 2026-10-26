@@ -16,13 +16,13 @@ import { cn } from "@/lib/utils"
 // the edges for mouse-driven paging. Mouse users can also grab and drag the
 // rail itself — a 5px threshold keeps ordinary clicks untouched; on `paged`
 // rails (the hero) a deliberate drag flips a whole page instead of
-// rubber-banding back. Buttons sit in the page gutter and fade out at the
-// ends. Mobile keeps pure swipe — chevrons only render from lg up.
+// rubber-banding back. Mobile keeps pure swipe — chevrons only render from lg
+// up.
 //
-// `loop` turns the rail into a continuous carousel: the left chevron is
-// removed and the right chevron never disappears — on the last page it cuts
-// straight back to the first (1→2→…→N→1), with frosted-glass controls for
-// rails laid over artwork.
+// Every rail is a continuous carousel: both frosted chevrons stay put at the
+// ends, the right one wraps the last page back to the first (1→…→N→1) and
+// the left one wraps the first page back to the last. They hide only when
+// the rail fits without scrolling.
 //
 // `className` extends the inner scroller (e.g. snap classes for paging
 // rails). `pagination` (on by default) renders clickable dashes below the
@@ -38,7 +38,6 @@ export function RailScroller({
   autoAdvanceMs,
   pagination = true,
   paged = false,
-  loop = false,
   controlsInset = false,
   paginationOverlay = false,
 }: {
@@ -47,14 +46,11 @@ export function RailScroller({
   autoAdvanceMs?: number
   pagination?: boolean
   paged?: boolean
-  loop?: boolean
   controlsInset?: boolean
   paginationOverlay?: boolean
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const railRef = useRef<HTMLDivElement>(null)
-  const [atStart, setAtStart] = useState(true)
-  const [atEnd, setAtEnd] = useState(true)
   const [pageCount, setPageCount] = useState(0)
   const [activePage, setActivePage] = useState(0)
   const hoveredRef = useRef(false)
@@ -84,8 +80,6 @@ export function RailScroller({
   const updateEnds = useCallback(() => {
     const el = railRef.current
     if (el === null) return
-    setAtStart(el.scrollLeft <= 0)
-    setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1)
     if (el.clientWidth === 0) return
     const pages = Math.max(
       1,
@@ -122,17 +116,31 @@ export function RailScroller({
     })
   }
 
-  // The looped rail's single control: one full page forward, wrapping from
-  // the last page straight to the first instead of reversing.
+  // The chevrons never reverse at the ends: forward from the last page cuts
+  // straight back to the first, backward from the first cuts to the last.
   const advancePage = () => {
     const el = railRef.current
     if (el === null) return
-    if (!paged) {
-      nudge(1)
-    } else if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 1) {
+    if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 1) {
       el.scrollTo({ left: 0, behavior: "auto" })
-    } else {
+    } else if (paged) {
       el.scrollBy({ left: el.clientWidth, behavior: scrollBehavior })
+    } else {
+      nudge(1)
+    }
+  }
+  const retreatPage = () => {
+    const el = railRef.current
+    if (el === null) return
+    if (el.scrollLeft <= 0) {
+      el.scrollTo({
+        left: el.scrollWidth - el.clientWidth,
+        behavior: "auto",
+      })
+    } else if (paged) {
+      el.scrollBy({ left: -el.clientWidth, behavior: scrollBehavior })
+    } else {
+      nudge(-1)
     }
   }
 
@@ -259,12 +267,8 @@ export function RailScroller({
     })
   }
 
-  const arrowClass = cn(
-    "absolute top-1/2 z-10 hidden size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full shadow-sm transition-opacity disabled:pointer-events-none disabled:opacity-0 lg:flex",
-    loop
-      ? "border border-white/15 bg-black/35 text-white backdrop-blur-2xl backdrop-saturate-150 hover:bg-black/55"
-      : "border bg-background/90 backdrop-blur hover:bg-accent"
-  )
+  const arrowClass =
+    "absolute top-1/2 z-10 hidden size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/35 text-white shadow-sm backdrop-blur-2xl backdrop-saturate-150 transition-opacity hover:bg-black/55 disabled:pointer-events-none disabled:opacity-0 lg:flex"
 
   return (
     <div
@@ -292,22 +296,20 @@ export function RailScroller({
       >
         {children}
       </div>
-      {!loop && (
-        <button
-          type="button"
-          aria-label="Scroll left"
-          disabled={atStart}
-          onClick={() => nudge(-1)}
-          className={cn(arrowClass, controlsInset ? "left-3" : "-left-4")}
-        >
-          <HugeiconsIcon icon={ArrowLeft01Icon} />
-        </button>
-      )}
       <button
         type="button"
-        aria-label={loop ? "Next slide" : "Scroll right"}
-        disabled={loop ? pageCount <= 1 : atEnd}
-        onClick={loop ? advancePage : () => nudge(1)}
+        aria-label="Scroll left"
+        disabled={pageCount <= 1}
+        onClick={retreatPage}
+        className={cn(arrowClass, controlsInset ? "left-3" : "-left-4")}
+      >
+        <HugeiconsIcon icon={ArrowLeft01Icon} />
+      </button>
+      <button
+        type="button"
+        aria-label="Scroll right"
+        disabled={pageCount <= 1}
+        onClick={advancePage}
         className={cn(arrowClass, controlsInset ? "right-3" : "-right-4")}
       >
         <HugeiconsIcon icon={ArrowRight01Icon} />
@@ -315,13 +317,13 @@ export function RailScroller({
       {pagination && (
         <div
           className={cn(
-            "flex min-h-8 items-center justify-center gap-2",
-            paginationOverlay ? "absolute inset-x-0 bottom-3" : "mt-2.5"
+            "z-20 flex min-h-8 items-center justify-center gap-2",
+            paginationOverlay ? "absolute inset-x-0 bottom-8" : "mt-2.5"
           )}
         >
           {pageCount > 1 && (
             <>
-              <div className="flex h-8 items-center gap-1.5 rounded-full bg-black/60 px-3 backdrop-blur">
+              <div className="flex h-8 items-center gap-1.5 rounded-full bg-black/35 px-3 ring-1 ring-white/15 backdrop-blur-2xl backdrop-saturate-150">
                 {Array.from({ length: pageCount }, (_, i) => {
                   const active = activePage === i
                   const animating =
@@ -375,7 +377,7 @@ export function RailScroller({
                   aria-label={paused ? "Resume slideshow" : "Pause slideshow"}
                   aria-pressed={paused}
                   onClick={() => setPausedBoth(!paused)}
-                  className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-black/75"
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/35 text-white ring-1 ring-white/15 backdrop-blur-2xl backdrop-saturate-150 transition-colors hover:bg-black/55"
                 >
                   <HugeiconsIcon
                     icon={paused ? PlayIcon : PauseIcon}

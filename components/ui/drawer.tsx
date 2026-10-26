@@ -108,7 +108,8 @@ function DrawerContent({
     swipeDirection === "down" || swipeDirection === "up" ? "y" : "x"
   // Base UI reserves a stable scrollbar gutter while the drawer is open. The
   // overlay extends over that gutter so the page dims edge to edge; the popup
-  // stays inside the layout viewport so its left and right insets match.
+  // stays inside the layout viewport and its consumer sizes it to the
+  // physical window so both insets stay even.
   const [windowGutter, setWindowGutter] = React.useState(0)
   React.useLayoutEffect(() => {
     const update = () =>
@@ -172,7 +173,12 @@ function DrawerContent({
             "data-[swipe-direction=right]:right-0 data-[swipe-direction=right]:origin-right data-[swipe-direction=right]:[--closed-transform:translate3d(calc(100%+var(--drawer-inset,0px)+2px),0,0)] data-[swipe-direction=right]:[--translate-x:calc(var(--drawer-swipe-movement-x)-var(--stack-peek-offset)-(var(--stack-shrink)*100%))]",
             className
           )}
-          style={style}
+          style={
+            {
+              ...style,
+              "--drawer-window-gutter": `${windowGutter}px`,
+            } as React.CSSProperties
+          }
           {...props}
         >
           {showSwipeHandle && <DrawerSwipeHandle />}

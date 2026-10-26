@@ -315,16 +315,23 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
               ))}
             </SelectContent>
           </Select>
-          {(["movie", "tv"] as const).map((t) => (
-            <Button
-              key={t}
-              variant={railType === t ? "default" : "secondary"}
-              size="sm"
-              onClick={() => setRailType(t)}
-            >
-              {t === "movie" ? "Movies" : "Series"}
-            </Button>
-          ))}
+          <div
+            role="group"
+            aria-label="Media type"
+            className="flex items-center gap-1 rounded-full bg-muted p-1"
+          >
+            {(["movie", "tv"] as const).map((t) => (
+              <Button
+                key={t}
+                variant={railType === t ? "default" : "ghost"}
+                size="sm"
+                aria-pressed={railType === t}
+                onClick={() => setRailType(t)}
+              >
+                {t === "movie" ? "Movies" : "Series"}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 

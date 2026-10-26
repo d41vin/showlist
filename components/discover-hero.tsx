@@ -78,7 +78,7 @@ export function DiscoverHero({
           alt=""
           fill
           sizes="(max-width: 1152px) 100vw, 1152px"
-          className="object-cover"
+          className="object-cover object-[50%_38%]"
           priority={priority}
         />
       ) : null}

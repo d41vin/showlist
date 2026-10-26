@@ -212,7 +212,7 @@ function TitleDetailsContent({
           <div role="region" aria-label={`${item.title} artwork`}>
             <RailScroller
               paged
-              loop
+              autoAdvanceMs={active ? 8000 : undefined}
               controlsInset
               paginationOverlay
               className="snap-x snap-mandatory gap-0 pb-0"
@@ -250,16 +250,18 @@ function TitleDetailsContent({
           />
         )}
         {data.logoPath && !playing && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex bg-gradient-to-t from-black/55 via-black/20 to-transparent px-6 pt-16 pb-12">
-            <Image
-              src={tmdbLogoUrl(data.logoPath)}
-              alt={item.title}
-              width={260}
-              height={96}
-              sizes="(max-width: 480px) 60vw, 260px"
-              loading="eager"
-              className="max-h-14 w-auto max-w-[60%] object-contain drop-shadow-lg"
-            />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/55 via-black/20 to-transparent pt-16 pb-12">
+            <div className="mx-auto flex w-full max-w-2xl px-6">
+              <Image
+                src={tmdbLogoUrl(data.logoPath)}
+                alt={item.title}
+                width={260}
+                height={96}
+                sizes="(max-width: 480px) 60vw, 260px"
+                loading="eager"
+                className="max-h-14 w-auto max-w-[60%] object-contain drop-shadow-lg"
+              />
+            </div>
           </div>
         )}
         {isDrawer && !playing && (
@@ -298,167 +300,176 @@ function TitleDetailsContent({
         )}
       </div>
 
-      <div className="mx-auto w-full max-w-2xl min-w-0 pb-6">
-        <div className="flex flex-wrap items-center justify-center gap-1.5 px-6 pt-4">
-          {isAuthenticated && (
-            <ItemActions
-              item={item}
-              state={stateByKey.get(currentKey)}
-              collections={collections}
-              layout="row"
-            />
-          )}
-          {isAuthenticated && trailer && (
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-controls={heroId}
-              onClick={() => {
-                setPlaying((value) => !value)
-                if (!playing) {
-                  if (isDrawer) scrollRef.current?.scrollTo({ top: 0 })
-                  else heroRef.current?.scrollIntoView({ block: "start" })
-                }
-              }}
-            >
-              <HugeiconsIcon icon={playing ? Cancel01Icon : PlayIcon} />
-              {playing ? "Stop trailer" : "Play trailer"}
-            </Button>
-          )}
-          {isDrawer && playing && onBack && (
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-label="Back to previous title"
-              onClick={() => {
-                setPlaying(false)
-                onBack()
-              }}
-            >
-              <HugeiconsIcon icon={ArrowLeft01Icon} />
-              Back
-            </Button>
-          )}
-          {isDrawer && playing && onClose && (
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label="Close details"
-              onClick={() => {
-                setPlaying(false)
-                onClose()
-              }}
-            >
-              <HugeiconsIcon icon={Cancel01Icon} />
-              Close
-            </Button>
-          )}
-          {!isDrawer && (
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label="Back"
-              onClick={() => {
-                setPlaying(false)
-                onBack?.()
-              }}
-            >
-              <HugeiconsIcon icon={ArrowLeft01Icon} />
-              Back
-            </Button>
-          )}
-          {isAuthenticated && trailerFailed && (
-            <>
-              <p role="status" className="text-sm text-muted-foreground">
-                Couldn&rsquo;t load trailer.
-              </p>
+      <div
+        className={
+          isDrawer
+            ? "relative z-10 -mt-8 rounded-t-3xl bg-popover/75 pt-8 backdrop-blur-2xl backdrop-saturate-150"
+            : undefined
+        }
+      >
+        <div className="mx-auto w-full max-w-2xl min-w-0 pb-6">
+          <div className="flex flex-wrap items-center justify-center gap-1.5 px-6 pt-4">
+            {isAuthenticated && (
+              <ItemActions
+                item={item}
+                state={stateByKey.get(currentKey)}
+                collections={collections}
+                layout="row"
+              />
+            )}
+            {isAuthenticated && trailer && (
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-controls={heroId}
+                onClick={() => {
+                  setPlaying((value) => !value)
+                  if (!playing) {
+                    if (isDrawer) scrollRef.current?.scrollTo({ top: 0 })
+                    else heroRef.current?.scrollIntoView({ block: "start" })
+                  }
+                }}
+              >
+                <HugeiconsIcon icon={playing ? Cancel01Icon : PlayIcon} />
+                {playing ? "Stop trailer" : "Play trailer"}
+              </Button>
+            )}
+            {isDrawer && playing && onBack && (
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Back to previous title"
+                onClick={() => {
+                  setPlaying(false)
+                  onBack()
+                }}
+              >
+                <HugeiconsIcon icon={ArrowLeft01Icon} />
+                Back
+              </Button>
+            )}
+            {isDrawer && playing && onClose && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setTrailerFailed(false)}
+                aria-label="Close details"
+                onClick={() => {
+                  setPlaying(false)
+                  onClose()
+                }}
               >
-                Retry trailer
+                <HugeiconsIcon icon={Cancel01Icon} />
+                Close
               </Button>
-            </>
-          )}
-        </div>
+            )}
+            {!isDrawer && (
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label="Back"
+                onClick={() => {
+                  setPlaying(false)
+                  onBack?.()
+                }}
+              >
+                <HugeiconsIcon icon={ArrowLeft01Icon} />
+                Back
+              </Button>
+            )}
+            {isAuthenticated && trailerFailed && (
+              <>
+                <p role="status" className="text-sm text-muted-foreground">
+                  Couldn&rsquo;t load trailer.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTrailerFailed(false)}
+                >
+                  Retry trailer
+                </Button>
+              </>
+            )}
+          </div>
 
-        <header className="flex flex-col gap-2 px-6 pt-5">
-          {isDrawer ? (
-            <>
-              <DrawerTitle
+          <header className="flex flex-col gap-2 px-6 pt-5">
+            {isDrawer ? (
+              <>
+                <DrawerTitle
+                  ref={titleRef}
+                  id={titleId}
+                  tabIndex={-1}
+                  className="text-2xl break-words"
+                >
+                  {item.title}
+                </DrawerTitle>
+                <DrawerDescription className="sr-only">
+                  {item.mediaType === "movie" ? "Movie" : "Show"}
+                  {item.year ? ` · ${item.year}` : ""}. Details and watch
+                  history.
+                </DrawerDescription>
+              </>
+            ) : (
+              <h1
                 ref={titleRef}
                 id={titleId}
                 tabIndex={-1}
-                className="text-2xl break-words"
+                className="text-2xl font-semibold break-words"
               >
                 {item.title}
-              </DrawerTitle>
-              <DrawerDescription className="sr-only">
-                {item.mediaType === "movie" ? "Movie" : "Show"}
-                {item.year ? ` · ${item.year}` : ""}. Details and watch history.
-              </DrawerDescription>
-            </>
-          ) : (
-            <h1
-              ref={titleRef}
-              id={titleId}
-              tabIndex={-1}
-              className="text-2xl font-semibold break-words"
-            >
-              {item.title}
-            </h1>
-          )}
-          <TitleFacts data={data} item={item} />
-        </header>
-
-        <section aria-labelledby={overviewId} className="px-6 py-4 text-sm">
-          <OverviewHeading id={overviewId} className="sr-only">
-            Overview
-          </OverviewHeading>
-          <div className="flex flex-col gap-2">
-            {data.tagline && (
-              <p className="text-muted-foreground italic">{data.tagline}</p>
+              </h1>
             )}
-            {data.overview ? (
-              <p className="text-sm leading-relaxed">{data.overview}</p>
-            ) : (
-              <p className="text-muted-foreground">No overview available.</p>
-            )}
-          </div>
-        </section>
+            <TitleFacts data={data} item={item} />
+          </header>
 
-        <TitleMetadata
-          item={item}
-          data={data}
-          extras={extras}
-          failed={extrasFailed}
-          loading={
-            active && isAuthenticated && extras === undefined && !extrasFailed
-          }
-          onRetry={() => {
-            setExtras(undefined)
-            setExtrasFailed(false)
-          }}
-          onNavigate={() => setPlaying(false)}
-        />
+          <section aria-labelledby={overviewId} className="px-6 py-4 text-sm">
+            <OverviewHeading id={overviewId} className="sr-only">
+              Overview
+            </OverviewHeading>
+            <div className="flex flex-col gap-2">
+              {data.tagline && (
+                <p className="text-muted-foreground italic">{data.tagline}</p>
+              )}
+              {data.overview ? (
+                <p className="text-sm leading-relaxed">{data.overview}</p>
+              ) : (
+                <p className="text-muted-foreground">No overview available.</p>
+              )}
+            </div>
+          </section>
 
-        {isAuthenticated &&
-          item.mediaType === "tv" &&
-          data.seasons.length > 0 && (
-            <EpisodesSection key={currentKey} item={item} data={data} />
-          )}
-
-        {isAuthenticated && (
-          <MoreLikeThis
+          <TitleMetadata
             item={item}
-            recs={recs}
-            failed={recsFailed}
-            variant={variant}
-            onRetry={() => setRecsFailed(false)}
+            data={data}
+            extras={extras}
+            failed={extrasFailed}
+            loading={
+              active && isAuthenticated && extras === undefined && !extrasFailed
+            }
+            onRetry={() => {
+              setExtras(undefined)
+              setExtrasFailed(false)
+            }}
             onNavigate={() => setPlaying(false)}
           />
-        )}
+
+          {isAuthenticated &&
+            item.mediaType === "tv" &&
+            data.seasons.length > 0 && (
+              <EpisodesSection key={currentKey} item={item} data={data} />
+            )}
+
+          {isAuthenticated && (
+            <MoreLikeThis
+              item={item}
+              recs={recs}
+              failed={recsFailed}
+              variant={variant}
+              onRetry={() => setRecsFailed(false)}
+              onNavigate={() => setPlaying(false)}
+            />
+          )}
+        </div>
       </div>
     </>
   )
@@ -509,7 +520,7 @@ function ArtworkSlide({
           fill
           loading={eager ? "eager" : "lazy"}
           sizes={isDrawer ? "calc(100vw - 18px)" : "100vw"}
-          className="object-cover"
+          className="object-cover object-[50%_38%]"
           onError={() => setFailed(true)}
         />
       ) : (
@@ -624,7 +635,7 @@ function MoreLikeThis({
         </>
       ) : (
         <div className="mt-3">
-          <RailScroller pagination={false} className="gap-3">
+          <RailScroller>
             {recs.map((rec) => (
               <MediaLink
                 key={mediaKey(rec)}

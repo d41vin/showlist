@@ -22,14 +22,17 @@ export function DetailsDrawer({
       open={open}
       onOpenChange={onOpenChange}
       onOpenChangeComplete={onOpenChangeComplete}
-      showSwipeHandle
     >
       <DrawerContent
-        className="[--drawer-inset:--spacing(5)] [&>[data-slot=drawer-swipe-handle]]:absolute [&>[data-slot=drawer-swipe-handle]]:top-0 [&>[data-slot=drawer-swipe-handle]]:h-5"
-        // Fill the window height minus the 20px inset on both ends.
+        className="[--drawer-inset:--spacing(5)]"
+        // The layout viewport stops at the window scrollbar gutter, so pull
+        // the right margin in by that gutter to reach a true 20px gap at the
+        // physical edge without putting content under the scrollbar.
         style={{
-          height: "calc(100dvh - 2.5rem)",
-          maxHeight: "calc(100dvh - 2.5rem)",
+          marginRight:
+            "calc(var(--drawer-inset) - var(--drawer-window-gutter, 0px))",
+          height: "calc(100dvh - var(--drawer-inset) - var(--drawer-inset))",
+          maxHeight: "calc(100dvh - var(--drawer-inset) - var(--drawer-inset))",
         }}
         finalFocus={finalFocus}
       >
