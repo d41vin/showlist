@@ -11,6 +11,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { AiDescribe } from "@/components/ai-describe"
+import { LibraryCard } from "@/components/library-card"
 import { useNavigationState } from "@/components/navigation-state"
 import { MediaTypeToggle } from "@/components/media-type-toggle"
 import { ShowCard } from "@/components/show-card"
@@ -48,6 +49,9 @@ import { cn } from "@/lib/utils"
 
 const GRID_CLASS =
   "grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+
+const LIBRARY_GRID_CLASS =
+  "grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 xl:grid-cols-3"
 
 const TEXT_SORTS: { value: TitleSort; label: string }[] = [
   { value: "relevance", label: "Best match" },
@@ -240,6 +244,22 @@ export function SearchPageContent() {
               </div>
             )}
           </div>
+        )
+      })}
+    </div>
+  )
+
+  const libraryGrid = (titles: MediaItem[]) => (
+    <div className={LIBRARY_GRID_CLASS}>
+      {titles.map((item) => {
+        const key = mediaKey(item)
+        return (
+          <LibraryCard
+            key={key}
+            item={item}
+            state={stateByKey.get(key)}
+            collections={collections}
+          />
         )
       })}
     </div>
@@ -465,9 +485,9 @@ export function SearchPageContent() {
           </div>
           {scope === "library" ? (
             items === undefined ? (
-              <SearchSkeleton />
+              <LibrarySkeleton />
             ) : library.length ? (
-              grid(library)
+              libraryGrid(library)
             ) : (
               <p className="py-12 text-center text-muted-foreground">
                 No saved titles match. Try clearing a filter or searching all
@@ -546,7 +566,7 @@ export function SearchPageContent() {
                   </button>
                   {libraryOpen && (
                     <div id="library-search-results" className="mt-4">
-                      {grid(library)}
+                      {libraryGrid(library)}
                     </div>
                   )}
                 </section>
@@ -665,6 +685,20 @@ function SearchSkeleton() {
           <Skeleton className="aspect-2/3 w-full rounded-lg" />
           <Skeleton className="h-4 w-3/4" />
         </div>
+      ))}
+    </div>
+  )
+}
+
+function LibrarySkeleton() {
+  return (
+    <div
+      className={LIBRARY_GRID_CLASS}
+      aria-label="Loading your library"
+      aria-busy="true"
+    >
+      {Array.from({ length: 6 }, (_, index) => (
+        <Skeleton key={index} className="aspect-video w-full rounded-xl" />
       ))}
     </div>
   )

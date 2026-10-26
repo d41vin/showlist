@@ -17,8 +17,12 @@ import { cn } from "@/lib/utils"
 // rail itself — a 5px threshold keeps ordinary clicks untouched; on `paged`
 // rails (the hero) a deliberate drag flips a whole page instead of
 // rubber-banding back. Buttons sit in the page gutter and fade out at the
-// ends — no wrap-jump. Mobile keeps pure swipe — chevrons only render from
-// lg up.
+// ends. Mobile keeps pure swipe — chevrons only render from lg up.
+//
+// `loop` turns the rail into a continuous carousel: the left chevron is
+// removed and the right chevron never disappears — on the last page it cuts
+// straight back to the first (1→2→…→N→1), with frosted-glass controls for
+// rails laid over artwork.
 //
 // `className` extends the inner scroller (e.g. snap classes for paging
 // rails). `pagination` (on by default) renders clickable dashes below the
@@ -34,6 +38,7 @@ export function RailScroller({
   autoAdvanceMs,
   pagination = true,
   paged = false,
+  loop = false,
   controlsInset = false,
   paginationOverlay = false,
 }: {
@@ -42,6 +47,7 @@ export function RailScroller({
   autoAdvanceMs?: number
   pagination?: boolean
   paged?: boolean
+  loop?: boolean
   controlsInset?: boolean
   paginationOverlay?: boolean
 }) {
@@ -114,6 +120,20 @@ export function RailScroller({
       left: direction * el.clientWidth * 0.85,
       behavior: scrollBehavior,
     })
+  }
+
+  // The looped rail's single control: one full page forward, wrapping from
+  // the last page straight to the first instead of reversing.
+  const advancePage = () => {
+    const el = railRef.current
+    if (el === null) return
+    if (!paged) {
+      nudge(1)
+    } else if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 1) {
+      el.scrollTo({ left: 0, behavior: "auto" })
+    } else {
+      el.scrollBy({ left: el.clientWidth, behavior: scrollBehavior })
+    }
   }
 
   // Billboard autoplay — see the header comment. Skipped entirely for
@@ -239,8 +259,12 @@ export function RailScroller({
     })
   }
 
-  const arrowClass =
-    "absolute top-1/2 z-10 hidden size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border bg-background/90 shadow-sm backdrop-blur transition-opacity hover:bg-accent disabled:pointer-events-none disabled:opacity-0 lg:flex"
+  const arrowClass = cn(
+    "absolute top-1/2 z-10 hidden size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full shadow-sm transition-opacity disabled:pointer-events-none disabled:opacity-0 lg:flex",
+    loop
+      ? "border border-white/15 bg-black/35 text-white backdrop-blur-2xl backdrop-saturate-150 hover:bg-black/55"
+      : "border bg-background/90 backdrop-blur hover:bg-accent"
+  )
 
   return (
     <div
@@ -268,20 +292,22 @@ export function RailScroller({
       >
         {children}
       </div>
+      {!loop && (
+        <button
+          type="button"
+          aria-label="Scroll left"
+          disabled={atStart}
+          onClick={() => nudge(-1)}
+          className={cn(arrowClass, controlsInset ? "left-3" : "-left-4")}
+        >
+          <HugeiconsIcon icon={ArrowLeft01Icon} />
+        </button>
+      )}
       <button
         type="button"
-        aria-label="Scroll left"
-        disabled={atStart}
-        onClick={() => nudge(-1)}
-        className={cn(arrowClass, controlsInset ? "left-3" : "-left-4")}
-      >
-        <HugeiconsIcon icon={ArrowLeft01Icon} />
-      </button>
-      <button
-        type="button"
-        aria-label="Scroll right"
-        disabled={atEnd}
-        onClick={() => nudge(1)}
+        aria-label={loop ? "Next slide" : "Scroll right"}
+        disabled={loop ? pageCount <= 1 : atEnd}
+        onClick={loop ? advancePage : () => nudge(1)}
         className={cn(arrowClass, controlsInset ? "right-3" : "-right-4")}
       >
         <HugeiconsIcon icon={ArrowRight01Icon} />

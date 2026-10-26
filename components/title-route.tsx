@@ -105,7 +105,7 @@ function TitleRouteContent({
     ) : (
       <div className="w-full min-w-0">
         {loading && (
-          <Skeleton className="h-[clamp(15rem,38vw,25rem)] max-h-[55dvh] w-full rounded-none" />
+          <Skeleton className="h-[clamp(15rem,38vw,28.125rem)] max-h-[55dvh] w-full rounded-none" />
         )}
         <div className="mx-auto w-full max-w-2xl space-y-4 px-6 py-6">
           <div className="flex flex-wrap justify-center gap-2">

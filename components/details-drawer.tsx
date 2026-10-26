@@ -25,11 +25,11 @@ export function DetailsDrawer({
       showSwipeHandle
     >
       <DrawerContent
-        className="[&>[data-slot=drawer-swipe-handle]]:absolute [&>[data-slot=drawer-swipe-handle]]:top-0 [&>[data-slot=drawer-swipe-handle]]:h-5"
-        // Fill the window height minus the 8px inset on both ends.
+        className="[--drawer-inset:--spacing(5)] [&>[data-slot=drawer-swipe-handle]]:absolute [&>[data-slot=drawer-swipe-handle]]:top-0 [&>[data-slot=drawer-swipe-handle]]:h-5"
+        // Fill the window height minus the 20px inset on both ends.
         style={{
-          height: "calc(100dvh - 1rem)",
-          maxHeight: "calc(100dvh - 1rem)",
+          height: "calc(100dvh - 2.5rem)",
+          maxHeight: "calc(100dvh - 2.5rem)",
         }}
         finalFocus={finalFocus}
       >

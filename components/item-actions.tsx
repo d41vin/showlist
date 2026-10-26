@@ -37,16 +37,20 @@ import { cn } from "@/lib/utils"
 
 // The in-app action buttons for one title — shared by the card overlay
 // (stacked), the details drawer and the discover hero (horizontal row).
+// `glass` is for rows laid over artwork: translucent dark buttons with the
+// active state inverted to solid white.
 export function ItemActions({
   item,
   state,
   collections,
   layout = "stack",
+  appearance = "default",
 }: {
   item: MediaItem
   state: ItemState | undefined
   collections: CollectionSummary[]
   layout?: "stack" | "row"
+  appearance?: "default" | "glass"
 }) {
   const toggleWatchlist = useMutation(api.items.toggleWatchlist)
   const toggleWatched = useMutation(api.items.toggleWatched)
@@ -68,13 +72,19 @@ export function ItemActions({
   const watching = state?.watching ?? false
   const sentiment = state?.sentiment
   const stacked = layout === "stack"
+  const tone = (active: boolean) =>
+    appearance === "glass"
+      ? active
+        ? "border-white/20 bg-white text-black hover:bg-white/85"
+        : "border-white/15 bg-black/35 text-white backdrop-blur-2xl backdrop-saturate-150 hover:bg-black/55 hover:text-white"
+      : undefined
 
   return (
     <>
       <Button
         variant={inWatchlist ? "default" : "secondary"}
         size="sm"
-        className={stacked ? "w-full" : undefined}
+        className={cn(stacked && "w-full", tone(inWatchlist))}
         aria-pressed={inWatchlist}
         onClick={() => toggleWatchlist({ item: snapshot })}
       >
@@ -86,7 +96,7 @@ export function ItemActions({
       <Button
         variant={watched ? "default" : "secondary"}
         size="sm"
-        className={stacked ? "w-full" : undefined}
+        className={cn(stacked && "w-full", tone(watched))}
         aria-pressed={watched}
         onClick={() => toggleWatched({ item: snapshot })}
       >
@@ -96,7 +106,7 @@ export function ItemActions({
       <Button
         variant={watching ? "default" : "secondary"}
         size="sm"
-        className={stacked ? "w-full" : undefined}
+        className={cn(stacked && "w-full", tone(watching))}
         aria-pressed={watching}
         onClick={() => toggleWatching({ item: snapshot })}
       >
@@ -108,18 +118,21 @@ export function ItemActions({
         state={state}
         collections={collections}
         stacked={stacked}
+        tone={tone}
       />
       <div className={cn("flex gap-1.5", stacked && "mt-1 justify-center")}>
         <SentimentButton
           value="liked"
           icon={ThumbsUpIcon}
           active={sentiment === "liked"}
+          className={tone(sentiment === "liked")}
           onToggle={() => setSentiment({ item: snapshot, sentiment: "liked" })}
         />
         <SentimentButton
           value="disliked"
           icon={ThumbsDownIcon}
           active={sentiment === "disliked"}
+          className={tone(sentiment === "disliked")}
           onToggle={() =>
             setSentiment({ item: snapshot, sentiment: "disliked" })
           }
@@ -133,11 +146,13 @@ function SentimentButton({
   value,
   icon,
   active,
+  className,
   onToggle,
 }: {
   value: Sentiment
   icon: typeof ThumbsUpIcon
   active: boolean
+  className?: string
   onToggle: () => void
 }) {
   return (
@@ -146,6 +161,7 @@ function SentimentButton({
       size="icon-sm"
       aria-pressed={active}
       aria-label={value === "liked" ? "Liked" : "Disliked"}
+      className={className}
       onClick={onToggle}
     >
       <HugeiconsIcon icon={icon} />
@@ -161,11 +177,13 @@ function CollectionsPopover({
   state,
   collections,
   stacked,
+  tone,
 }: {
   snapshot: MediaItem
   state: ItemState | undefined
   collections: CollectionSummary[]
   stacked: boolean
+  tone: (active: boolean) => string | undefined
 }) {
   const addItem = useMutation(api.collections.addItem)
   const removeItem = useMutation(api.collections.removeItem)
@@ -190,7 +208,7 @@ function CollectionsPopover({
             <Button
               variant={inAnyCollection ? "default" : "secondary"}
               size="sm"
-              className={stacked ? "w-full" : undefined}
+              className={cn(stacked && "w-full", tone(inAnyCollection))}
               aria-pressed={inAnyCollection}
             />
           }

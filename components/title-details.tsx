@@ -212,6 +212,7 @@ function TitleDetailsContent({
           <div role="region" aria-label={`${item.title} artwork`}>
             <RailScroller
               paged
+              loop
               controlsInset
               paginationOverlay
               className="snap-x snap-mandatory gap-0 pb-0"
@@ -267,7 +268,7 @@ function TitleDetailsContent({
               <Button
                 variant="secondary"
                 size="sm"
-                className="pointer-events-auto shadow-sm"
+                className="pointer-events-auto border-white/15 bg-black/35 text-white shadow-sm backdrop-blur-2xl backdrop-saturate-150 hover:bg-black/55 hover:text-white"
                 aria-label="Back to previous title"
                 onClick={() => {
                   setPlaying(false)
@@ -282,7 +283,7 @@ function TitleDetailsContent({
               <Button
                 variant="secondary"
                 size="sm"
-                className="pointer-events-auto ml-auto shadow-sm"
+                className="pointer-events-auto ml-auto border-white/15 bg-black/35 text-white shadow-sm backdrop-blur-2xl backdrop-saturate-150 hover:bg-black/55 hover:text-white"
                 aria-label="Close details"
                 onClick={() => {
                   setPlaying(false)
@@ -496,7 +497,7 @@ function ArtworkSlide({
   const [failed, setFailed] = useState(false)
 
   return (
-    <div className="relative h-[clamp(15rem,38vw,25rem)] max-h-[55dvh] w-full min-w-0 shrink-0 snap-start">
+    <div className="relative h-[clamp(15rem,38vw,28.125rem)] max-h-[55dvh] w-full min-w-0 shrink-0 snap-start">
       {path && !failed ? (
         <Image
           src={tmdbBackdropUrl(path, "w1280")}

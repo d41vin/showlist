@@ -223,31 +223,45 @@ function PeopleList({
   const [expanded, setExpanded] = useRetainedState(storageKey, false)
   const listId = useId()
   const visible = expanded ? people : people.slice(0, 10)
+  const list = (
+    <ul id={listId} className="flex flex-wrap gap-x-3 gap-y-1">
+      {visible.map((person) => (
+        <li key={person.id} className="max-w-full min-w-0">
+          <Link
+            href={entitySearchHref(
+              {
+                kind: "person",
+                id: String(person.id),
+                name: person.name,
+                credit,
+              },
+              mediaType
+            )}
+            title={person.role || undefined}
+            onNavigate={onNavigate}
+            className="underline underline-offset-4"
+          >
+            {person.name}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
 
   return (
     <>
-      <ul id={listId} className="flex flex-wrap gap-x-3 gap-y-1">
-        {visible.map((person) => (
-          <li key={person.id} className="max-w-full min-w-0">
-            <Link
-              href={entitySearchHref(
-                {
-                  kind: "person",
-                  id: String(person.id),
-                  name: person.name,
-                  credit,
-                },
-                mediaType
-              )}
-              title={person.role || undefined}
-              onNavigate={onNavigate}
-              className="underline underline-offset-4"
-            >
-              {person.name}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {expanded && people.length > 10 ? (
+        <div
+          tabIndex={0}
+          role="group"
+          aria-label={`Full ${credit} list`}
+          className="max-h-64 [scrollbar-width:thin] [scrollbar-color:color-mix(in_oklch,var(--foreground)_20%,transparent)_transparent] overflow-y-auto overscroll-contain rounded-lg border border-border/60 p-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          {list}
+        </div>
+      ) : (
+        list
+      )}
       {people.length > 10 && (
         <Button
           variant="link"

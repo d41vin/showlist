@@ -562,6 +562,7 @@ function DiscoverContent() {
             className="snap-x snap-mandatory"
             autoAdvanceMs={8000}
             paged
+            loop
           >
             {heroItems.map((item, index) => (
               <div

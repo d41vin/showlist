@@ -123,6 +123,7 @@ export function DiscoverHero({
                 )}
                 collections={gridState.collections}
                 layout="row"
+                appearance="glass"
               />
             </div>
           </>
