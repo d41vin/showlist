@@ -24,6 +24,9 @@ export function ShowCard({
   overlayOpen,
   onOverlayOpenChange,
   badge,
+  sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 16vw",
+  compact = false,
+  onNavigate,
 }: {
   item: MediaItem
   state: ItemState | undefined
@@ -31,6 +34,9 @@ export function ShowCard({
   overlayOpen?: boolean
   onOverlayOpenChange?: (open: boolean) => void
   badge?: string
+  sizes?: string
+  compact?: boolean
+  onNavigate?: () => void
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -62,6 +68,7 @@ export function ShowCard({
       <div className="relative aspect-2/3 overflow-hidden rounded-lg bg-muted">
         <MediaLink
           item={item}
+          onNavigate={onNavigate}
           aria-label={`Details for ${item.title}`}
           className="absolute inset-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         >
@@ -70,7 +77,7 @@ export function ShowCard({
               src={tmdbPosterUrl(item.posterPath)}
               alt={`${item.title} poster`}
               fill
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 16vw"
+              sizes={sizes}
               className="object-cover"
             />
           ) : (
@@ -86,14 +93,20 @@ export function ShowCard({
         )}
         <div
           className={cn(
-            "pointer-events-none absolute inset-0 flex flex-col justify-center gap-1.5 bg-black/70 p-3 transition-opacity",
+            "pointer-events-none absolute inset-0 flex flex-col justify-center bg-black/70 transition-opacity",
+            compact ? "gap-1 p-1.5" : "gap-1.5 p-3",
             overlayOpen
               ? "opacity-100"
               : "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
           )}
         >
           <div className="pointer-events-auto">
-            <ItemActions item={item} state={state} collections={collections} />
+            <ItemActions
+              item={item}
+              state={state}
+              collections={collections}
+              dense={compact}
+            />
           </div>
         </div>
       </div>
@@ -101,6 +114,7 @@ export function ShowCard({
         <MediaLink
           item={item}
           data-search-title
+          onNavigate={onNavigate}
           className="block w-full truncate text-left text-sm font-medium hover:underline"
         >
           {item.title}

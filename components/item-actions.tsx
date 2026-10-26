@@ -45,12 +45,14 @@ export function ItemActions({
   collections,
   layout = "stack",
   appearance = "default",
+  dense = false,
 }: {
   item: MediaItem
   state: ItemState | undefined
   collections: CollectionSummary[]
   layout?: "stack" | "row"
   appearance?: "default" | "glass"
+  dense?: boolean
 }) {
   const toggleWatchlist = useMutation(api.items.toggleWatchlist)
   const toggleWatched = useMutation(api.items.toggleWatched)
@@ -72,6 +74,7 @@ export function ItemActions({
   const watching = state?.watching ?? false
   const sentiment = state?.sentiment
   const stacked = layout === "stack"
+  const buttonSize = dense ? "xs" : "sm"
   const tone = (active: boolean) =>
     appearance === "glass"
       ? active
@@ -83,7 +86,7 @@ export function ItemActions({
     <>
       <Button
         variant={inWatchlist ? "default" : "secondary"}
-        size="sm"
+        size={buttonSize}
         className={cn(stacked && "w-full", tone(inWatchlist))}
         aria-pressed={inWatchlist}
         onClick={() => toggleWatchlist({ item: snapshot })}
@@ -95,7 +98,7 @@ export function ItemActions({
       </Button>
       <Button
         variant={watched ? "default" : "secondary"}
-        size="sm"
+        size={buttonSize}
         className={cn(stacked && "w-full", tone(watched))}
         aria-pressed={watched}
         onClick={() => toggleWatched({ item: snapshot })}
@@ -105,7 +108,7 @@ export function ItemActions({
       </Button>
       <Button
         variant={watching ? "default" : "secondary"}
-        size="sm"
+        size={buttonSize}
         className={cn(stacked && "w-full", tone(watching))}
         aria-pressed={watching}
         onClick={() => toggleWatching({ item: snapshot })}
@@ -118,6 +121,7 @@ export function ItemActions({
         state={state}
         collections={collections}
         stacked={stacked}
+        dense={dense}
         tone={tone}
       />
       <div className={cn("flex gap-1.5", stacked && "mt-1 justify-center")}>
@@ -125,6 +129,7 @@ export function ItemActions({
           value="liked"
           icon={ThumbsUpIcon}
           active={sentiment === "liked"}
+          size={dense ? "icon-xs" : "icon-sm"}
           className={tone(sentiment === "liked")}
           onToggle={() => setSentiment({ item: snapshot, sentiment: "liked" })}
         />
@@ -132,6 +137,7 @@ export function ItemActions({
           value="disliked"
           icon={ThumbsDownIcon}
           active={sentiment === "disliked"}
+          size={dense ? "icon-xs" : "icon-sm"}
           className={tone(sentiment === "disliked")}
           onToggle={() =>
             setSentiment({ item: snapshot, sentiment: "disliked" })
@@ -146,19 +152,21 @@ function SentimentButton({
   value,
   icon,
   active,
+  size,
   className,
   onToggle,
 }: {
   value: Sentiment
   icon: typeof ThumbsUpIcon
   active: boolean
+  size: "icon-xs" | "icon-sm"
   className?: string
   onToggle: () => void
 }) {
   return (
     <Button
       variant={active ? "default" : "secondary"}
-      size="icon-sm"
+      size={size}
       aria-pressed={active}
       aria-label={value === "liked" ? "Liked" : "Disliked"}
       className={className}
@@ -177,12 +185,14 @@ function CollectionsPopover({
   state,
   collections,
   stacked,
+  dense,
   tone,
 }: {
   snapshot: MediaItem
   state: ItemState | undefined
   collections: CollectionSummary[]
   stacked: boolean
+  dense: boolean
   tone: (active: boolean) => string | undefined
 }) {
   const addItem = useMutation(api.collections.addItem)
@@ -207,7 +217,7 @@ function CollectionsPopover({
           render={
             <Button
               variant={inAnyCollection ? "default" : "secondary"}
-              size="sm"
+              size={dense ? "xs" : "sm"}
               className={cn(stacked && "w-full", tone(inAnyCollection))}
               aria-pressed={inAnyCollection}
             />

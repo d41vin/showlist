@@ -36,6 +36,7 @@ export function RailScroller({
   children,
   className,
   autoAdvanceMs,
+  onRailScroll,
   pagination = true,
   paged = false,
   controlsInset = false,
@@ -44,6 +45,7 @@ export function RailScroller({
   children: React.ReactNode
   className?: string
   autoAdvanceMs?: number
+  onRailScroll?: (scrollLeft: number) => void
   pagination?: boolean
   paged?: boolean
   controlsInset?: boolean
@@ -81,6 +83,7 @@ export function RailScroller({
     const el = railRef.current
     if (el === null) return
     if (el.clientWidth === 0) return
+    onRailScroll?.(el.scrollLeft)
     const pages = Math.max(
       1,
       paged
@@ -93,7 +96,7 @@ export function RailScroller({
         ? pages - 1
         : Math.min(pages - 1, Math.round(el.scrollLeft / el.clientWidth))
     )
-  }, [paged])
+  }, [onRailScroll, paged])
 
   useEffect(() => {
     const el = railRef.current
