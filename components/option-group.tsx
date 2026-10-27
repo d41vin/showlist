@@ -1,6 +1,6 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export type OptionGroupOption<T extends string> = {
   value: T
@@ -19,8 +19,9 @@ interface OptionGroupProps<T extends string> {
 
 /**
  * Single-choice control group used for filters that swap the list beneath them.
- * Stays a labelled group of pressed-state buttons rather than tabs: these
- * options tune a view, they do not own page-sized panels.
+ * Rendered with the Tabs primitive, so every filter strip in the app reads and
+ * behaves the same; the panels themselves stay outside the component because
+ * each page keeps its own loading and URL wiring.
  */
 export function OptionGroup<T extends string>({
   label,
@@ -31,24 +32,18 @@ export function OptionGroup<T extends string>({
   describedBy,
 }: OptionGroupProps<T>) {
   return (
-    <div
-      className="flex items-center gap-1 rounded-full bg-muted p-1"
-      role="group"
-      aria-label={label}
-      aria-describedby={describedBy}
-    >
-      {options.map((option) => (
-        <Button
-          key={option.value}
-          variant={option.value === value ? "default" : "ghost"}
-          size="sm"
-          aria-pressed={option.value === value}
-          disabled={disabled}
-          onClick={() => onChange?.(option.value)}
-        >
-          {option.label}
-        </Button>
-      ))}
-    </div>
+    <Tabs value={value} onValueChange={(next) => onChange?.(next as T)}>
+      <TabsList aria-label={label} aria-describedby={describedBy}>
+        {options.map((option) => (
+          <TabsTrigger
+            key={option.value}
+            value={option.value}
+            disabled={disabled}
+          >
+            {option.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   )
 }

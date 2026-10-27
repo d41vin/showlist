@@ -322,7 +322,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
             </SelectContent>
           </Select>
           <OptionGroup
-            label="Media type"
+            label="Provider media type"
             value={railType}
             options={RAIL_TYPE_OPTIONS}
             onChange={setRailType}
