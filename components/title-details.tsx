@@ -262,7 +262,7 @@ function TitleDetailsContent({
         )}
         {data.logoPath && !playing && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/55 via-black/20 to-transparent pt-16 pb-12">
-            <div className="mx-auto flex w-full max-w-2xl px-6">
+            <div className="flex w-full px-3">
               <Image
                 src={tmdbLogoUrl(data.logoPath)}
                 alt={item.title}
@@ -311,8 +311,8 @@ function TitleDetailsContent({
         )}
       </div>
 
-      <div className={isDrawer ? "relative z-10" : undefined}>
-        {isDrawer && backdrops.length > 0 && !playing && (
+      <div className="relative z-10">
+        {backdrops.length > 0 && !playing && (
           <div
             aria-hidden
             className="pointer-events-none absolute inset-x-0 z-0 bg-popover/70 backdrop-blur-2xl backdrop-saturate-150"
