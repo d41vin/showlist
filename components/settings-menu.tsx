@@ -2,6 +2,7 @@
 
 import { Show } from "@clerk/nextjs"
 import {
+  ComputerIcon,
   Moon02Icon,
   Settings01Icon,
   Sun01Icon,
@@ -20,12 +21,26 @@ import {
 import { useAiConfig } from "@/lib/ai"
 import { cn } from "@/lib/utils"
 
+// next-themes is mounted with enableSystem, so "system" is a stored
+// preference and not merely the absence of one. The rows highlight `theme`
+// (what the user picked) instead of `resolvedTheme` (what the OS answered),
+// otherwise System could never read as selected.
+const THEME_OPTIONS: {
+  value: "light" | "dark" | "system"
+  label: string
+  icon: typeof Sun01Icon
+}[] = [
+  { value: "light", label: "Light", icon: Sun01Icon },
+  { value: "dark", label: "Dark", icon: Moon02Icon },
+  { value: "system", label: "System", icon: ComputerIcon },
+]
+
 // One header entry point for app preferences: the theme switch plus the AI
 // settings dialog. The AI key stays browser-local (see lib/ai) — the popover
 // row is only a door to that dialog, with the same configured/not hint the
 // old header button had.
 export function SettingsMenu() {
-  const { resolvedTheme, setTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
   const [open, setOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const aiConfigured = useAiConfig() !== null
@@ -40,45 +55,39 @@ export function SettingsMenu() {
             </Button>
           }
         />
-        <PopoverContent align="end" className="w-44 p-1.5">
+        <PopoverContent align="end" className="w-44 gap-0.5 p-2">
           <p
             id="theme-group-label"
-            className="px-2 pt-1.5 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase"
+            className="px-2.5 pt-1 pb-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase"
           >
             Theme
           </p>
           <div
             role="group"
             aria-labelledby="theme-group-label"
-            className="flex gap-1 px-1 pb-1"
+            className="flex flex-col"
           >
-            <Button
-              variant={resolvedTheme === "light" ? "secondary" : "ghost"}
-              size="sm"
-              className="flex-1"
-              aria-pressed={resolvedTheme === "light"}
-              onClick={() => setTheme("light")}
-            >
-              <HugeiconsIcon icon={Sun01Icon} />
-              Light
-            </Button>
-            <Button
-              variant={resolvedTheme === "dark" ? "secondary" : "ghost"}
-              size="sm"
-              className="flex-1"
-              aria-pressed={resolvedTheme === "dark"}
-              onClick={() => setTheme("dark")}
-            >
-              <HugeiconsIcon icon={Moon02Icon} />
-              Dark
-            </Button>
+            {THEME_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                variant={theme === option.value ? "secondary" : "ghost"}
+                size="sm"
+                className="w-full justify-start px-2.5"
+                aria-pressed={theme === option.value}
+                onClick={() => setTheme(option.value)}
+              >
+                <HugeiconsIcon icon={option.icon} />
+                {option.label}
+              </Button>
+            ))}
           </div>
           <Show when="signed-in">
+            <div className="my-1 h-px bg-border/50" aria-hidden />
             <Button
               variant="ghost"
               size="sm"
               className={cn(
-                "w-full justify-start",
+                "w-full justify-start px-2.5",
                 aiConfigured ? "text-foreground" : "text-muted-foreground"
               )}
               onClick={() => {

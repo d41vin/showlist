@@ -325,7 +325,7 @@ function TitleDetailsContent({
           />
         )}
         <div className="relative z-10 mx-auto w-full max-w-2xl min-w-0 pb-6">
-          <div className="flex flex-wrap items-center justify-center gap-1.5 px-6 pt-4">
+          <div className="flex flex-wrap items-center justify-start gap-1.5 px-6 pt-4">
             {isAuthenticated && (
               <ItemActions
                 item={item}
