@@ -5,7 +5,7 @@ import type { FunctionReturnType } from "convex/server"
 import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 
-import { Button } from "@/components/ui/button"
+import { OptionGroup, type OptionGroupOption } from "@/components/option-group"
 import { ShowCard } from "@/components/show-card"
 import { useRetainedState } from "@/components/navigation-state"
 import type { CardGridState } from "@/components/use-item-state"
@@ -61,11 +61,17 @@ const CURATED_PROVIDERS: {
 ]
 
 type ProviderSort = "newest" | "popularity" | "rating"
+type ProviderRailType = "movie" | "tv"
 
 const PROVIDER_SORT_ITEMS: { value: ProviderSort; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "popularity", label: "Most popular" },
   { value: "rating", label: "Top rated" },
+]
+
+const RAIL_TYPE_OPTIONS: OptionGroupOption<ProviderRailType>[] = [
+  { value: "movie", label: "Movies" },
+  { value: "tv", label: "Series" },
 ]
 
 // "New season" when a season premiere (E1) airs inside the badge window
@@ -99,7 +105,7 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
     "providers:picked",
     null
   )
-  const [railType, setRailType] = useRetainedState<"movie" | "tv">(
+  const [railType, setRailType] = useRetainedState<ProviderRailType>(
     "providers:type",
     "movie"
   )
@@ -315,23 +321,12 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
               ))}
             </SelectContent>
           </Select>
-          <div
-            role="group"
-            aria-label="Media type"
-            className="flex items-center gap-1 rounded-full bg-muted p-1"
-          >
-            {(["movie", "tv"] as const).map((t) => (
-              <Button
-                key={t}
-                variant={railType === t ? "default" : "ghost"}
-                size="sm"
-                aria-pressed={railType === t}
-                onClick={() => setRailType(t)}
-              >
-                {t === "movie" ? "Movies" : "Series"}
-              </Button>
-            ))}
-          </div>
+          <OptionGroup
+            label="Media type"
+            value={railType}
+            options={RAIL_TYPE_OPTIONS}
+            onChange={setRailType}
+          />
         </div>
       </div>
 
@@ -339,7 +334,11 @@ export function ProviderRail({ gridState }: { gridState: CardGridState }) {
           icon" assets (no transparency), so they fill the tile instead of
           floating as wordmarks. The p-1 gutter gives the selection ring
           room so it doesn't clip against the scroll edges. */}
-      <div className="hide-scrollbar mt-3 -ml-1 flex gap-2 overflow-x-auto p-1">
+      <div
+        role="group"
+        aria-label="Watch provider"
+        className="hide-scrollbar mt-3 -ml-1 flex gap-2 overflow-x-auto p-1"
+      >
         {providers === null
           ? Array.from({ length: 6 }, (_, i) => (
               <div

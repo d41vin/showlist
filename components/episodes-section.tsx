@@ -202,7 +202,11 @@ export function EpisodesSection({
       {/* Season chips — horizontally scrollable when there are many seasons.
           Chips with a season poster show its thumb before the label; ones
           without fall back to the plain label. */}
-      <div className="hide-scrollbar -mx-6 mt-3 flex gap-1.5 overflow-x-auto px-6 pb-1">
+      <div
+        role="group"
+        aria-label="Season"
+        className="hide-scrollbar -mx-6 mt-3 flex gap-1.5 overflow-x-auto px-6 pb-1"
+      >
         {seasons.map((seasonSummary) => (
           <Button
             key={seasonSummary.season}

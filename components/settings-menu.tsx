@@ -41,14 +41,22 @@ export function SettingsMenu() {
           }
         />
         <PopoverContent align="end" className="w-44 p-1.5">
-          <p className="px-2 pt-1.5 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          <p
+            id="theme-group-label"
+            className="px-2 pt-1.5 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase"
+          >
             Theme
           </p>
-          <div className="flex gap-1 px-1 pb-1">
+          <div
+            role="group"
+            aria-labelledby="theme-group-label"
+            className="flex gap-1 px-1 pb-1"
+          >
             <Button
               variant={resolvedTheme === "light" ? "secondary" : "ghost"}
               size="sm"
               className="flex-1"
+              aria-pressed={resolvedTheme === "light"}
               onClick={() => setTheme("light")}
             >
               <HugeiconsIcon icon={Sun01Icon} />
@@ -58,6 +66,7 @@ export function SettingsMenu() {
               variant={resolvedTheme === "dark" ? "secondary" : "ghost"}
               size="sm"
               className="flex-1"
+              aria-pressed={resolvedTheme === "dark"}
               onClick={() => setTheme("dark")}
             >
               <HugeiconsIcon icon={Moon02Icon} />

@@ -14,6 +14,7 @@ import { AiDescribe } from "@/components/ai-describe"
 import { LibraryCard } from "@/components/library-card"
 import { useNavigationState } from "@/components/navigation-state"
 import { MediaTypeToggle } from "@/components/media-type-toggle"
+import { OptionGroup, type OptionGroupOption } from "@/components/option-group"
 import { ShowCard } from "@/components/show-card"
 import { Button } from "@/components/ui/button"
 import {
@@ -64,6 +65,11 @@ const TEXT_SORTS: { value: TitleSort; label: string }[] = [
 const ENTITY_SORTS: { value: EntitySort; label: string }[] = [
   { value: "popularity", label: "Popularity" },
   { value: "newest", label: "Release date" },
+]
+
+const SEARCH_SCOPE_OPTIONS: OptionGroupOption<"all" | "library">[] = [
+  { value: "all", label: "All titles" },
+  { value: "library", label: "My library" },
 ]
 
 const SORT_LABELS: Record<SearchSort, string> = {
@@ -312,16 +318,14 @@ export function SearchPageContent() {
         <>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {!entity && (
-              <div
-                role="group"
-                aria-label="Search scope"
-                className="flex items-center gap-1 rounded-full bg-muted p-1"
-              >
-                <Button
-                  size="sm"
-                  variant={scope === "all" ? "default" : "ghost"}
-                  aria-pressed={scope === "all"}
-                  onClick={() =>
+              <OptionGroup
+                label="Search scope"
+                value={scope}
+                options={SEARCH_SCOPE_OPTIONS}
+                onChange={(next) => {
+                  if (next === "library") {
+                    update({ scope: "library", sort: null, order: null })
+                  } else {
                     update({
                       scope: null,
                       status: null,
@@ -331,40 +335,22 @@ export function SearchPageContent() {
                       order: null,
                     })
                   }
-                >
-                  All titles
-                </Button>
-                <Button
-                  size="sm"
-                  variant={scope === "library" ? "default" : "ghost"}
-                  aria-pressed={scope === "library"}
-                  onClick={() =>
-                    update({
-                      scope: "library",
-                      sort: null,
-                      order: null,
-                    })
-                  }
-                >
-                  My library
-                </Button>
-              </div>
+                }}
+              />
             )}
             {entity?.kind === "genre" ? (
-              <div
-                role="group"
-                aria-label="Media type"
-                className="flex items-center gap-1 rounded-full bg-muted p-1"
-              >
-                <Button
-                  size="sm"
-                  variant="default"
-                  disabled
-                  aria-describedby="genre-type-help"
-                >
-                  {type === "movie" ? "Movies" : "Series"}
-                </Button>
-              </div>
+              <OptionGroup
+                label="Media type"
+                value={type}
+                options={[
+                  {
+                    value: type,
+                    label: type === "movie" ? "Movies" : "Series",
+                  },
+                ]}
+                disabled
+                describedBy="genre-type-help"
+              />
             ) : (
               <MediaTypeToggle
                 value={type}
